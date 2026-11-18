@@ -34,3 +34,13 @@ jobs:
         run: python -m pip install -e .
       - name: Run API and browser-download integration tests
         run: python -m unittest discover -s tests -v
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test one-click folder download logic
+        run: node --test tests/test_browser_logic.cjs

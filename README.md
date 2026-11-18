@@ -23,9 +23,13 @@ FastAPI job queue and a mobile-friendly browser UI. Initial support is for
   mini-theater, genre/tags and author's intention. The original chapter reader
   still strips duplicated intro from body content.
 - Each book is delivered as an individual TXT attachment to the requesting
-  browser device. No ZIP files. On iPhone Chrome, tap each TXT download button;
-  on Android and desktop Chrome, saving multiple separate TXT files into a
-  selected directory is offered when the browser supports the API.
+  browser device. No ZIP files. On desktop Chrome and supported Android Chrome,
+  the submit button immediately asks for one destination folder and then
+  automatically saves each completed TXT to that folder. Keep the tab open;
+  an existing file is never overwritten (a numbered suffix is added).
+  Browsers without File System Access directory support, including iPhone
+  Chrome, keep per-book TXT download links. A manual queue-only button and
+  save-completed-files recovery action remain available.
 - One password-protected user: HTTP Basic auth over HTTPS in production.
 
 ## Local development
@@ -38,6 +42,7 @@ python -m venv .venv
 . .venv/bin/activate
 pip install -e .
 python -m unittest discover -s tests -v
+node --test tests/test_browser_logic.cjs  # Node.js 22+, front-end flow tests
 ```
 
 To run the application, create a private password file with a 24+ character

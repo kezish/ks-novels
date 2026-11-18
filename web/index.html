@@ -22,6 +22,7 @@
           placeholder="https://www.52shuku.net/yanqing/17_b/bkfXm.html" rows="6" required></textarea>
         <div class="actions">
           <button id="submit" type="submit">加入下载队列</button>
+          <button id="queue-only" class="secondary" type="submit" hidden>仅加入队列（手动保存）</button>
           <span class="muted small">每批最多 30 本，重复链接自动合并</span>
         </div>
       </form>
@@ -34,13 +35,13 @@
       </div>
       <p id="save-hint" class="muted small">点击「下载 TXT」，文件由浏览器保存到当前设备。</p>
       <div class="actions" id="folder-actions" hidden>
-        <button id="save-all" class="secondary" type="button">选择文件夹保存已完成 TXT</button>
+        <button id="save-all" class="secondary" type="button">选择文件夹补存已完成 TXT</button>
         <span class="muted small">每本是独立 TXT，无 ZIP 文件。</span>
       </div>
       <div id="batches" aria-live="polite"><p class="muted">读取任务中…</p></div>
     </section>
     <footer class="muted small">
-      文件在服务器上只临时保留 12 小时。iPhone Chrome 请逐本点击下载；Android Chrome 若支持文件夹写入，可直接保存多本。
+      文件在服务器上只临时保留 12 小时。支持文件夹授权的浏览器可一次选择、逐本自动保存（请保持本页打开）；iPhone Chrome 需逐本点击下载。
     </footer>
   </main>
 </body>
