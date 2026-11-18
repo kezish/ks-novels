@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 DATA = Path(os.environ.get("NOVELS_DATA_DIR", "/var/lib/novels-web"))
 BOOKS = DATA / "books"
 DB = DATA / "jobs.sqlite3"
-STATIC = Path(__file__).resolve().parent
+STATIC = Path(__file__).resolve().parent.parent / "web"
 YURI = os.environ.get("NOVELS_YURI_BIN", "yuri-scraper")
 SITE = os.environ.get("NOVELS_ORIGIN", "https://novels.mtschema.com")
 MAX_BATCH = 30

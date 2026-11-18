@@ -1,0 +1,40 @@
+# YuriScraper
+
+# Downloaded library and generated metadata
+novels/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Environment
+.env
+.env.local
+yamibo_config.json
+
+# Local research report
+/RESEARCH_REPORT.md
+/STARTUP_PREVIEW.html

@@ -59,7 +59,7 @@ echo "$out/测试小说-0123456789abcdef.txt"
             NOVELS_ORIGIN=cls.base,
         )
         cls.proc = subprocess.Popen(
-            [PYTHON, "-m", "uvicorn", "app:app", "--app-dir", str(ROOT / "web"),
+            [PYTHON, "-m", "uvicorn", "app:app", "--app-dir", str(ROOT / "server"),
              "--host", "127.0.0.1", "--port", str(cls.port), "--workers", "1"],
             env=env,
             stdout=subprocess.DEVNULL,

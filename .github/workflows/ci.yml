@@ -1,0 +1,36 @@
+name: Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: scraper/go.mod
+          cache-dependency-path: scraper/go.sum
+      - name: Run downloader regression tests
+        working-directory: scraper
+        env:
+          CGO_ENABLED: "0"
+        run: go test -short ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install runtime dependencies
+        run: python -m pip install -e .
+      - name: Run API and browser-download integration tests
+        run: python -m unittest discover -s tests -v
