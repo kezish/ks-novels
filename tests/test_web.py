@@ -164,6 +164,37 @@ echo "$out/测试小说-0123456789abcdef.txt"
         self.assertIn("【小说简介】", text.decode("utf-8"))
         self.assertEqual(self.req(current["download_url"], authenticated=False)[0], 401)
 
+    def test_daily_and_single_book_download(self):
+        sys.path.insert(0,str(ROOT/'server'))
+        from catalog.store import init, connect, upsert, publish, now
+        from sources.base import Entry, Metadata
+        path=self.root/'data'/'catalog.sqlite3'
+        init(path)
+        url="https://www.52shuku.net/yanqing/17_b/testBook.html"
+        e=Entry('/yanqing/17_b/testBook.html',url,'测试书单','测试作者','仙侠','2026-11-24','latest_upload')
+        with connect(path) as db:
+            book_id=upsert(db,'52shuku',e,Metadata(e.title,e.author,e.category,'完整简介',e.uploaded),now().isoformat())
+        day=now().date().isoformat()
+        publish(path,day)
+        self.assertEqual(self.req('/daily')[0],200)
+        self.assertEqual(self.req('/api/daily/'+day,authenticated=False)[0],401)
+        code,_,body=self.req('/api/daily/'+day)
+        self.assertEqual(code,200)
+        self.assertEqual(json.loads(body)['books'][0]['title'],'测试书单')
+        code,_,body=self.req('/api/books/'+str(book_id)+'/download',method='POST',data={'source':'52shuku'},origin=self.base)
+        self.assertEqual(code,200,body)
+        job=json.loads(body)['job']
+        for _ in range(90):
+            _,_,body=self.req('/api/catalog/jobs/'+job['id'])
+            current=json.loads(body)
+            if current['state']=='completed': break
+            if current['state'] in ('failed','partial','canceled'): self.fail(str(current))
+            time.sleep(.1)
+        else: self.fail('Download wrapper did not complete')
+        self.assertEqual(self.req(current['download_url'])[0],200)
+        code,_,body=self.req('/api/books/'+str(book_id)+'/download',method='POST',data={'source':'52shuku'},origin=self.base)
+        self.assertEqual(json.loads(body)['job']['id'],job['id'])
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

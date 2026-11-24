@@ -91,3 +91,25 @@ source must preserve that state directory.
 Release path: test/commit here → update pinned commit/hash in
 `nixos-config` → Nix eval/build → remote `nixos-rebuild test` → verify
 Caddy and NaiveProxy → merge → `nixos-rebuild switch`.
+
+## 每日新书（双书源）
+
+访问 /daily 查看每日书单，展开简介后下载。久久原站下载页在点击时解析
+download_1 原生 TXT 链接并直接跳转，不要求预置登录 Cookie。52书库通过既有
+Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批量下载入口保持不变。
+
+- 久久：女生大类最新上传与只看新书两个榜单。
+- 52：言情栏目（含部分无CP）；第一阅读页仅提取第一章前的完整简介。
+- SQLite catalog.sqlite3 独立于 jobs.sqlite3；按书源ID及书名/作者标准化去重，
+  保留来源，保守模糊匹配并记录疑似重复。
+- 采集窗口初始七天，成功后保留48小时重叠；失败不推进水位；每日书单按
+  首次发现时间发布，已发布作品不会因新增来源重复列入。
+- 通知仅有 NotificationProvider 及待发送 outbox，目前没有配置推送渠道。
+
+运行（建议由 NixOS systemd timer 管理，默认每小时采集、08:00 UTC+8 发布）：
+
+    NOVELS_DATA_DIR=/var/lib/novels-web PYTHONPATH=server python -m catalog.cli sync
+    NOVELS_DATA_DIR=/var/lib/novels-web PYTHONPATH=server python -m catalog.cli daily
+
+新增书源实现 server/sources/base.py 的 SourceAdapter 并注册于 registry.py。
+原生下载及现有52队列下载已支持，其他生成型下载器需增加对应下载包装。

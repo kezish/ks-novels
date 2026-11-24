@@ -373,3 +373,10 @@ async def cancel(job_id: str, _: bool = Depends(authorize)):
         else:
             raise HTTPException(409, "Job cannot be canceled")
     return {"ok": True}
+
+# Daily catalog is isolated from the existing queue schema and worker.
+from catalog.routes import install as install_catalog
+install_catalog(app, path=DATA / "catalog.sqlite3", static=STATIC,
+                authorize=authorize, job_connect=connect, book_dir=BOOKS,
+                normalize_url=normalize_url, submit=submit, submission=Submission,
+                as_job=as_job)

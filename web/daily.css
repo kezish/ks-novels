@@ -1,0 +1,18 @@
+:root{color-scheme:light dark; font-family:system-ui,-apple-system,BlinkMacSystemFont,sans-serif;--line:#8884;--accent:#3568bb}
+*{box-sizing:border-box}
+body{margin:0;background:Canvas;color:CanvasText}
+main{max-width:720px;margin:auto;padding:16px max(14px,env(safe-area-inset-right)) 40px max(14px,env(safe-area-inset-left))}
+header,nav,.filters,.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+header{justify-content:space-between}h1{font-size:1.5rem;margin:8px 0 20px}a{color:LinkText}
+nav{justify-content:space-between;margin-bottom:14px}input,select,button,.download{font:inherit;min-height:44px;border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:Canvas;color:CanvasText}
+.filters{margin-bottom:8px}.filters label{font-size:.85rem}.filters select{max-width:130px}
+#status,.meta,.source{font-size:.9rem;opacity:.8}
+details{border-bottom:1px solid var(--line)}
+summary{cursor:pointer;padding:16px 4px;min-height:64px;list-style:none;position:relative;padding-right:26px}
+summary::-webkit-details-marker{display:none}
+summary::after{content:'⌄';position:absolute;right:4px;top:18px}
+details[open] summary::after{content:'⌃'}
+.title{display:block;font-weight:600;line-height:1.5;overflow-wrap:anywhere}.meta{display:block;margin-top:4px}
+.description{white-space:pre-wrap;line-height:1.75;overflow-wrap:anywhere;margin:8px 4px 16px}
+.actions{margin:10px 4px 18px}.download{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:white;text-decoration:none;border:0;flex:1;cursor:pointer}
+button:disabled{opacity:.5}.source{margin:4px}.error{color:#c24b40}
