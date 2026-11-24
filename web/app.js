@@ -428,18 +428,27 @@ async function setupSourceKit() {
     dialog.addEventListener("click",e=>{if(e.target===dialog)dialog.close();});
     sourceSummary();
     const activity=document.querySelector("#search-activity"),countNode=document.querySelector("#result-count");
-    let activeKeyword="", seen=new Set(), totals={}, cursors={}, states={};
+    const categoryInput=document.querySelector("#search-category"),orderInput=document.querySelector("#search-order"),filterNote=document.querySelector("#filter-note");
+    let activeKeyword="",activeCategory="",activeOrder="newest",seen=new Set(),totals={},cursors={},states={};
+    function explainFilters(){
+      const c=categoryInput.value;
+      filterNote.textContent=c==="ncp"?"仅久久本地书单支持无CP分类。":["romance","fanfic"].includes(c)?"52原站及久久明确分类；其他书源暂不参与筛选。":c?"仅52书库支持此分类；其他书源暂不参与筛选。":"52、久久按站内发布 / 上传时间排序；无日期结果置后。";
+      if(orderInput.value==="relevance"&&!c)filterNote.textContent="";
+    }
+    categoryInput.addEventListener("change",explainFilters);
+    orderInput.addEventListener("change",explainFilters);
+    explainFilters();
     const more=el("button","more","继续加载");
     more.type="button";more.hidden=true;
     results.after(more);
     async function perform(keyword,ids,requestedCursors,append) {
-      searchButton.disabled=true;more.disabled=true;
+      searchButton.disabled=true;more.disabled=true;categoryInput.disabled=true;orderInput.disabled=true;
       activity.textContent=append?"正在加载更多…":"搜索中…";
       if(!append) {
         results.replaceChildren();seen=new Set();totals={};cursors={};states={};countNode.textContent="0";
       }
       try {
-        const data=await request("/api/sourcekit/search",{method:"POST",body:JSON.stringify({keyword,sites:ids,cursors:requestedCursors})});
+        const data=await request("/api/sourcekit/search",{method:"POST",body:JSON.stringify({keyword,sites:ids,cursors:requestedCursors,category:activeCategory,order:activeOrder})});
         for(const [id,state] of Object.entries(data.statuses)) {
           states[id]=state;
           if(Number.isInteger(state.next_page)&&state.next_page>0)cursors[id]=state.next_page;
@@ -450,9 +459,12 @@ async function setupSourceKit() {
           if(seen.has(key))continue;
           seen.add(key);totals[row.site]=(totals[row.site]||0)+1;
           const item=el("article","book"),fold=el("details"),summary=el("summary"),main=el("div","book-main");
+          item.dataset.published=row.published||"";
           main.append(el("span","book-title",row.title||row.book_url));
           const meta=el("div","book-meta");
           meta.append(el("span","",(row.author||"未知作者")),el("span","source-note","· "+(info.sites[row.site]||row.site)));
+          if(row.category){const genre=el("span","genre",row.category);genre.dataset.genre=row.category.includes("百合")?"百合":row.category.includes("耽美")?"耽美":row.category.includes("言情")?"言情":row.category.includes("无CP")?"无CP":row.category;meta.prepend(genre);}
+          if(row.published)meta.append(el("span","source-note",row.published));
           main.append(meta);summary.append(main,el("span","chevron","⌄"));
           const desc=el("div","desc"),description=el("div","desc-copy","展开后读取简介"),note=el("div","search-note"),detail=el("div","desc-actions");
           desc.append(description,note,detail);
@@ -484,11 +496,17 @@ async function setupSourceKit() {
           fold.addEventListener("toggle",()=>{if(fold.open){detail.append(button);loadDescription();}else item.append(button);});
           results.append(item);
         }
+        if(activeOrder!=="relevance"){
+          const cards=[...results.querySelectorAll(".book")];
+          cards.sort((a,b)=>{const x=a.dataset.published,y=b.dataset.published;if(!x||!y)return x?-1:y?1:0;return activeOrder==="newest"?y.localeCompare(x):x.localeCompare(y);});
+          for(const card of cards)results.append(card);
+        }
         status.textContent=Object.entries(states).map(([id,state])=>{
           const name=info.sites[id]||id;
           const count=totals[id]||0;
           let tail=cursors[id]?" · 可继续加载":"";
           if(state.state==="catalog")tail+=" · 仅已同步书单";
+          else if(state.state==="unsupported")tail+=" · 不支持此分类";
           else if(state.state==="blocked")tail+=" · 原站要求浏览器验证";
           else if(state.state==="failed")tail+=" · 部分请求失败";
           else if(state.state!=="completed")tail+=" · 状态未知";
@@ -502,14 +520,17 @@ async function setupSourceKit() {
           manual.target="_blank";manual.rel="noopener noreferrer";results.append(manual);
         }
       }catch(err){activity.textContent="搜索失败";status.textContent="搜索失败："+err.message+(append?"（已保留此前结果，可重试）":"");document.querySelector(".source-report").open=true;}
-      finally{more.hidden=Object.keys(cursors).length===0;searchButton.disabled=false;more.disabled=false;}
+      finally{more.hidden=Object.keys(cursors).length===0;searchButton.disabled=false;more.disabled=false;categoryInput.disabled=false;orderInput.disabled=false;}
     }
     document.querySelector("#sourcekit-search").addEventListener("submit",async event=>{
       event.preventDefault();
       const keyword=document.querySelector("#search-keyword").value.trim();
       const ids=[...sources.querySelectorAll("input:checked")].map(input=>input.value);
       if(!keyword||!ids.length){activity.textContent="请选择书源并输入关键词。";return;}
-      activeKeyword=keyword;await perform(keyword,ids,{},false);
+      activeKeyword=keyword;activeCategory=categoryInput.value;activeOrder=orderInput.value;await perform(keyword,ids,{},false);
+    });
+    for(const input of [categoryInput,orderInput])input.addEventListener("change",()=>{
+      if(activeKeyword&&!searchButton.disabled)document.querySelector("#sourcekit-search").requestSubmit();
     });
     more.addEventListener("click",()=>perform(activeKeyword,Object.keys(cursors),{...cursors},true));
   } catch (_) { const fallback=document.querySelector("#search-fallback");if(fallback)fallback.hidden=false; }

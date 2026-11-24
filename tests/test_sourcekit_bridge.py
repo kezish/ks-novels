@@ -78,3 +78,37 @@ printf '%s' '{"results":[{"site":"sk_biquge5","title":"合成","author":"作者"
             self.assertEqual(len(c["results"]),1)
             self.assertIsNone(c["statuses"]["sk_jiujiu"]["next_page"])
             self.assertNotIn(c["results"][0]["book_url"],{x["book_url"] for x in a["results"]})
+
+    def test_category_filter_and_order(self):
+        from fastapi import HTTPException
+        from unittest.mock import AsyncMock
+        rows=[{"site":"sk_shuku52","category":"GL百合","published":"2026-01-01","title":"old"},
+              {"site":"sk_shuku52","category":"GL百合","published":"2026-11-24","title":"new"}]
+        mock=AsyncMock(return_value={"results":rows,"statuses":{"sk_shuku52":{"state":"completed","count":2,"next_page":4}}})
+        with patch.object(b,"BIN","/fake"),patch.object(b,"search_live",mock):
+            r=asyncio.run(b.search("重生",list(b.ALL_SITES),category="gl",order="newest"))
+            self.assertEqual([x["title"] for x in r["results"]],["new","old"])
+            self.assertEqual(r["statuses"]["sk_czbooks"]["state"],"unsupported")
+            self.assertEqual(r["statuses"]["sk_jiujiu"]["state"],"unsupported")
+            mock.assert_awaited_once_with("重生",["sk_shuku52"],{},"gl","newest")
+            with self.assertRaises(HTTPException):
+                asyncio.run(b.search("重生",["sk_shuku52"],category="anything"))
+            with self.assertRaises(HTTPException):
+                asyncio.run(b.search("重生",["sk_shuku52"],order="anything"))
+
+    def test_catalog_orientation_and_native_order(self):
+        from catalog.store import init,connect,upsert
+        from sources.base import Entry,Metadata
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"catalog.sqlite3";init(path)
+            with connect(path) as db:
+                for i,cat,day in [(1,"无CP向","2026-01-01"),(2,"现代言情","2026-11-23"),(3,"无CP向","2026-11-24")]:
+                    e=Entry(str(i),f"https://www.ijjxsxzw.com/txt/{i}.html",f"重生小说{i}","作者",cat,day,"latest_upload")
+                    upsert(db,"jiujiu",e,Metadata(e.title,e.author,cat,"合成简介",day),"2026-11-24")
+            with patch.object(b,"BIN","/fake"):
+                r=asyncio.run(b.search("重生",list(b.ALL_SITES),path,category="ncp",order="newest"))
+                self.assertEqual([x["published"] for x in r["results"]],["2026-11-24","2026-01-01"])
+                self.assertEqual(r["statuses"]["sk_shuku52"]["state"],"unsupported")
+                self.assertTrue(all(x["category"]=="无CP向" for x in r["results"]))
+                a=asyncio.run(b.search("重生",["sk_jiujiu"],path,category="ncp",order="oldest"))
+                self.assertEqual([x["published"] for x in a["results"]],["2026-01-01","2026-11-24"])

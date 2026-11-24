@@ -6,7 +6,7 @@ mock=r"""
 const requests=[],saved=[];
 history.replaceState=()=>{}; // file fixture only; actual HTTP URL tested by backend
 const url="https://www.52shuku.net/gl/a.html";
-const row={site:"sk_shuku52",title:"测试长书名",author:"测试作者",book_url:url};
+const row={site:"sk_shuku52",title:"测试长书名",author:"测试作者",book_url:url,category:"GL百合",published:"2026-11-24"};
 let job={id:"testjob",url,title:"测试长书名",state:"queued",done:0,total:2};
 window.fetch=async (u,o={})=>{
   requests.push([u,o.method,o.body]);
@@ -15,7 +15,7 @@ window.fetch=async (u,o={})=>{
   else if(u==="/api/batches/testbatch"){job={...job,state:"completed",done:2,filename:"test.txt",download_url:"/api/jobs/testjob/file"};data={id:"testbatch",jobs:[job]};}
   else if(u==="/api/batches")data={batches:requests.some(x=>x[1]==="POST"&&x[0]==="/api/batches")?[{id:"testbatch",jobs:[job]}]:[]};
   else if(u==="/api/sourcekit/sources")data={enabled:true,sites:{sk_shuku52:"52书库",sk_czbooks:"CZBooks",sk_jiujiu:"久久",sk_biquge5:"笔趣阁"}};
-  else if(u==="/api/sourcekit/search")data={results:[row],statuses:{sk_shuku52:{state:"completed"}}};
+  else if(u==="/api/sourcekit/search")data={results:[{...row,title:"较旧",book_url:"https://www.52shuku.net/gl/old.html",published:"2025-01-01"},row],statuses:{sk_shuku52:{state:"completed"}}};
   else if(u.startsWith("/api/sourcekit/detail"))data={description:"长简介\n\n".repeat(25)};
   else if(u==="/api/daily")data={editions:[{day:"2026-11-24"}]};
   else if(u.startsWith("/api/daily/"))data={preview:true,books:[{id:1,title:row.title,author:row.author,category:"百合",description:"测试简介",sources:[{source:"52shuku",label:"52书库",external_id:"/gl/a.html",url,download_kind:"queued",modes:["latest_upload"]}]}]};
@@ -40,6 +40,13 @@ window.addEventListener("load",async()=>{
     document.querySelector("#search-keyword").value="测试";
     document.querySelector("#sourcekit-search").requestSubmit();
     await delay(150);
+    check(JSON.parse(requests.filter(x=>x[0]==="/api/sourcekit/search").at(-1)[2]).order==="newest","default newest");
+    const category=document.querySelector("#search-category");
+    category.value="gl";category.dispatchEvent(new Event("change"));await delay(100);
+    const query=JSON.parse(requests.filter(x=>x[0]==="/api/sourcekit/search").at(-1)[2]);
+    check(query.category==="gl"&&query.order==="newest"&&Object.keys(query.cursors).length===0,"native filters restart");
+    const cards=[...document.querySelectorAll(".book")];
+    check(cards[0].dataset.published==="2026-11-24"&&cards[1].dataset.published==="2025-01-01","date order");
     const book=document.querySelector(".book"),action=book.querySelector(".book-action"),fold=book.querySelector("details");
     check(action.textContent==="下载 TXT","download label");
     fold.open=true;await delay(100);
