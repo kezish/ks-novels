@@ -106,7 +106,7 @@ Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批�
   首次发现时间发布，已发布作品不会因新增来源重复列入。
 - 通知仅有 NotificationProvider 及待发送 outbox，目前没有配置推送渠道。
 
-运行（建议由 NixOS systemd timer 管理，默认每小时采集、08:00 UTC+8 发布）：
+运行（生产环境仅由 nixos-config 声明的 systemd timer 调度，默认每小时采集、08:00 UTC+8 发布；以下命令供开发测试）：
 
     NOVELS_DATA_DIR=/var/lib/novels-web PYTHONPATH=server python -m catalog.cli sync
     NOVELS_DATA_DIR=/var/lib/novels-web PYTHONPATH=server python -m catalog.cli daily
@@ -114,4 +114,5 @@ Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批�
 新增书源实现 server/sources/base.py 的 SourceAdapter 并注册于 registry.py。
 原生下载及现有52队列下载已支持，其他生成型下载器需增加对应下载包装。
 
-兼容旧部署：当生产状态目录为 /var/lib/novels-web 且未设置 NOVELS_CATALOG_EXTERNAL_TIMER=1 时，应用启动兼容调度器。NixOS 新定时器配置启用后停止应用内调度；两者使用同一个文件锁。可设 NOVELS_CATALOG_FALLBACK=0 禁用兼容调度器。
+
+生产环境的服务、定时任务及部署配置统一维护于 kezish/nixos-config。应用只提供一次性采集与发布 CLI，不包含独立的调度器。

@@ -58,16 +58,6 @@ class CatalogTests(unittest.TestCase):
         tomorrow=(now().date()+timedelta(days=1)).isoformat()
         publish(self.path,tomorrow)
         with connect(self.path) as db: self.assertEqual(books_for(db,tomorrow),[])
-    def test_fallback_schedule(self):
-        from catalog.scheduler import next_action
-        stamp=now().replace(hour=7,minute=0,second=0,microsecond=0)
-        self.assertEqual(next_action(self.path,stamp),'sync')
-        with connect(self.path) as db:
-            db.execute("INSERT INTO sync_runs(source,mode,started,ok,error) VALUES(?,?,?,?,?)",('jiujiu','latest_upload',stamp.isoformat(),1,''))
-        self.assertIsNone(next_action(self.path,stamp))
-        self.assertEqual(next_action(self.path,stamp.replace(hour=8)),'daily')
-        publish(self.path,stamp.date().isoformat())
-        self.assertEqual(next_action(self.path,stamp.replace(hour=8)),'sync')
     def test_sync_failure_no_watermark(self):
         stamp=now().date().isoformat()
         class Adapter:
