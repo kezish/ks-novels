@@ -113,3 +113,5 @@ Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批�
 
 新增书源实现 server/sources/base.py 的 SourceAdapter 并注册于 registry.py。
 原生下载及现有52队列下载已支持，其他生成型下载器需增加对应下载包装。
+
+兼容旧部署：当生产状态目录为 /var/lib/novels-web 且未设置 NOVELS_CATALOG_EXTERNAL_TIMER=1 时，应用启动兼容调度器。NixOS 新定时器配置启用后停止应用内调度；两者使用同一个文件锁。可设 NOVELS_CATALOG_FALLBACK=0 禁用兼容调度器。

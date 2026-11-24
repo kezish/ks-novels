@@ -250,10 +250,18 @@ async def lifespan(app: FastAPI):
     global worker_task, cleaner_task
     worker_task = asyncio.create_task(worker())
     cleaner_task = asyncio.create_task(cleaner())
+    tasks = [worker_task, cleaner_task]
+    # Old NixOS configurations update app source independently of systemd units.
+    # Enable a compatibility scheduler only on the existing production state path.
+    external_timer = os.environ.get("NOVELS_CATALOG_EXTERNAL_TIMER", "0") == "1"
+    fallback_enabled = os.environ.get("NOVELS_CATALOG_FALLBACK", "1" if DATA == Path("/var/lib/novels-web") else "0") == "1"
+    if fallback_enabled and not external_timer:
+        from catalog.scheduler import run as catalog_scheduler
+        tasks.append(asyncio.create_task(catalog_scheduler(DATA)))
     yield
-    for task in (worker_task, cleaner_task):
+    for task in tasks:
         task.cancel()
-    for task in (worker_task, cleaner_task):
+    for task in tasks:
         with contextlib.suppress(asyncio.CancelledError):
             await task
 
