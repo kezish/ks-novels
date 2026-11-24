@@ -1,5 +1,4 @@
 """Smoke and security regressions for the standalone ks-novels app."""
-import base64
 import json
 import os
 import socket
@@ -10,13 +9,14 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from urllib.parse import urlencode
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
-AUTH = "Basic " + base64.b64encode(
-    b"ks:local-smoke-password-long-enough-for-integration"
-).decode()
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self,*args,**kwargs):
+        return None
 
 
 def free_port():
@@ -65,7 +65,7 @@ echo "$out/测试小说-0123456789abcdef.txt"
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        cls.http = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        cls.http = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedirect())
         for _ in range(60):
             if cls.proc.poll() is not None:
                 raise RuntimeError(f"uvicorn exited with code {cls.proc.returncode}")
@@ -77,6 +77,9 @@ echo "$out/测试小说-0123456789abcdef.txt"
                 time.sleep(0.1)
         else:
             raise RuntimeError("uvicorn did not start")
+        code,headers,_=cls.login()
+        if code!=303: raise RuntimeError("Test login failed")
+        cls.cookie=headers["Set-Cookie"].split(";",1)[0]
 
     @classmethod
     def tearDownClass(cls):
@@ -92,7 +95,7 @@ echo "$out/测试小说-0123456789abcdef.txt"
     def req(cls, path, method="GET", data=None, authenticated=True, origin=None):
         headers = {}
         if authenticated:
-            headers["Authorization"] = AUTH
+            headers["Cookie"] = cls.cookie
         if data is not None:
             headers["Content-Type"] = "application/json"
         if origin is not None:
@@ -108,6 +111,40 @@ echo "$out/测试小说-0123456789abcdef.txt"
                 return result.status, result.headers, result.read()
         except urllib.error.HTTPError as error:
             return error.code, error.headers, error.read()
+
+    @classmethod
+    def login(cls, next_page="/daily", origin=None):
+        request=urllib.request.Request(cls.base+"/login",
+            data=urlencode({"username":"ks","password":cls.passwd.read_text().strip(),"next":next_page}).encode(),
+            headers={"Content-Type":"application/x-www-form-urlencoded","Origin":origin or cls.base},
+            method="POST")
+        try:
+            with cls.http.open(request,timeout=12) as r: return r.status,r.headers,r.read()
+        except urllib.error.HTTPError as r: return r.code,r.headers,r.read()
+
+    def test_persistent_login_and_logout(self):
+        code,headers,_=self.req("/daily/2026-11-24",authenticated=False)
+        self.assertEqual(code,303)
+        self.assertIn("next=%2Fdaily%2F2026-11-24",headers["Location"])
+        self.assertEqual(self.req("/login",authenticated=False)[0],200)
+        self.assertEqual(self.login(origin="https://attacker.invalid")[0],403)
+        code,headers,_=self.login(next_page="//attacker.invalid")
+        self.assertEqual(code,303)
+        self.assertEqual(headers["Location"],"/daily")
+        cookie=headers["Set-Cookie"]
+        self.assertIn("HttpOnly",cookie)
+        self.assertIn("SameSite=lax",cookie)
+        self.assertIn("Max-Age=15552000",cookie)
+        old=self.__class__.cookie
+        self.__class__.cookie=cookie.split(";",1)[0]
+        try:
+            self.assertEqual(self.req("/api/daily")[0],200)
+            self.assertEqual(self.req("/logout",method="POST",origin="https://attacker.invalid")[0],403)
+            self.assertEqual(self.req("/logout",method="POST",origin=self.base)[0],303)
+            self.assertEqual(self.req("/api/daily")[0],401)
+        finally:
+            self.__class__.cookie=old
+        self.assertEqual(self.req("/api/daily")[0],200)
 
     def test_auth_and_static_assets(self):
         self.assertEqual(self.req("/healthz", authenticated=False)[0], 200)

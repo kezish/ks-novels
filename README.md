@@ -9,7 +9,7 @@ FastAPI job queue and a mobile-friendly browser UI. Initial support is for
 | Directory | Owner | Purpose |
 | --- | --- | --- |
 | `scraper/` | Go | Full YuriScraper v0.7.0-derived download engine, site adapters, TXT/EPUB converter, command line and tests |
-| `server/` | Python | FastAPI Basic auth, SQLite queue, worker, progress, retention, attachments |
+| `server/` | Python | FastAPI session auth, SQLite queue, worker, progress, retention, attachments |
 | `web/` | HTML/CSS/JS | Responsive browser UI, progress polling and device-local TXT downloads |
 | `tests/` | Python | API, authentication, URL safety and TXT attachment integration tests |
 | `.github/workflows/` | CI | Go and Python regression tests |
@@ -30,7 +30,7 @@ FastAPI job queue and a mobile-friendly browser UI. Initial support is for
   Browsers without File System Access directory support, including iPhone
   Chrome, keep per-book TXT download links. A manual queue-only button and
   save-completed-files recovery action remain available.
-- One password-protected user: HTTP Basic auth over HTTPS in production.
+- One password-protected user: persistent server-side sessions over HTTPS in production.
 
 ## Local development
 
@@ -57,7 +57,7 @@ export NOVELS_ORIGIN=http://127.0.0.1:18765
 uvicorn app:app --app-dir server --host 127.0.0.1 --port 18765
 ```
 
-HTTP Basic username for the existing private deployment is `ks`.
+The login username for the existing private deployment is `ks`.
 Localhost HTTP is for local testing only; public deployment uses Caddy HTTPS.
 No user secrets, downloaded books, SQLite state, or runtime caches are tracked.
 
@@ -116,3 +116,7 @@ Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批�
 
 
 生产环境的服务、定时任务及部署配置统一维护于 kezish/nixos-config。应用只提供一次性采集与发布 CLI，不包含独立的调度器。
+
+## 登录会话
+
+使用原有账号和密码登录，浏览器保存 HttpOnly、SameSite=Lax 的持久化 Cookie（HTTPS 下额外启用 Secure 和 __Host- 前缀）。会话哈希存于 sessions.sqlite3；不记录明文会话令牌。服务重启及更新保留会话，退出登录撤销当前会话，主密码变更在服务重启后撤销旧会话。登录失败限制按客户端 IP 和全局计数，认证策略由 nixos-config 管理。HTTP Basic Auth 已取消；API 调用也使用会话。生产环境的登录参数：NOVELS_SESSION_MAX_DAYS、NOVELS_SESSION_IDLE_DAYS、NOVELS_LOGIN_MAX_FAILURES、NOVELS_LOGIN_WINDOW_SECONDS。

@@ -2,7 +2,7 @@
 const $=id=>document.getElementById(id);
 let books=[], generation=0;
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
-async function req(url,options){const r=await fetch(url,options);if(!r.ok)throw Error("请求失败 "+r.status);return r.json();}
+async function req(url,options){const r=await fetch(url,options);if(r.status===401){location.assign("/login?next="+encodeURIComponent(location.pathname));throw Error("登录已过期");}if(!r.ok)throw Error("请求失败 "+r.status);return r.json();}
 function shift(day,n){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
 function filter(){return books.filter(b=>(!$("category").value||b.category===$("category").value)&&b.sources.some(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value))));}
 function directURL(b,s){return "/api/books/"+b.id+"/direct?"+new URLSearchParams({source:s.source,external_id:s.external_id});}

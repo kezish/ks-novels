@@ -37,6 +37,10 @@ async function request(url, options = {}) {
     headers: { "Content-Type": "application/json" },
     ...options
   });
+  if (response.status === 401) {
+    window.location.assign("/login?next=" + encodeURIComponent(window.location.pathname));
+    throw new Error("登录已过期");
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.detail || "HTTP " + response.status);

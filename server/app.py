@@ -1,7 +1,6 @@
 """Single-user, local-first TXT job queue for 52shuku; no public file listing."""
 import asyncio
 import contextlib
-import hmac
 import os
 import re
 import shutil
@@ -14,7 +13,7 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from session_auth import BrowserAuth
 from pydantic import BaseModel, Field
 
 DATA = Path(os.environ.get("NOVELS_DATA_DIR", "/var/lib/novels-web"))
@@ -28,7 +27,7 @@ KEEP_SECONDS = 12 * 3600
 MAX_PENDING = 100
 WORKER_TIMEOUT = 3600
 STATUS_RE = re.compile(r"^(?:downloading|exporting|completed): (\d+)/(\d+) completed, (\d+) failed")
-AUTH = HTTPBasic(auto_error=False)
+browser_auth = BrowserAuth(DATA, STATIC, SITE)
 running_job = None
 running_process = None
 worker_task = None
@@ -82,19 +81,8 @@ def secret():
     return password
 
 
-def authorize(request: Request, credentials: HTTPBasicCredentials | None = Depends(AUTH)):
-    if request.method not in ("GET", "HEAD"):
-        origin = request.headers.get("origin")
-        if origin is not None and origin != SITE:
-            raise HTTPException(403, "Invalid request origin")
-    ok = credentials is not None and (
-        hmac.compare_digest(credentials.username.encode(), b"ks")
-        and hmac.compare_digest(credentials.password.encode(), app.state.password.encode())
-    )
-    if not ok:
-        raise HTTPException(401, "Authentication required",
-                            headers={"WWW-Authenticate": 'Basic realm="Novels"'})
-    return True
+def authorize(request: Request):
+    return browser_auth.authorize(request)
 
 
 def normalize_url(raw: str):
@@ -245,8 +233,8 @@ async def cleaner():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.password = secret()
     init_db()
+    browser_auth.init(secret())
     global worker_task, cleaner_task
     worker_task = asyncio.create_task(worker())
     cleaner_task = asyncio.create_task(cleaner())
@@ -267,13 +255,16 @@ async def secure_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Referrer-Policy"] = "same-origin"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Content-Security-Policy"] = (
         "default-src 'none'; script-src 'self'; style-src 'self';"
         " connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'"
     )
     return response
+
+
+browser_auth.install(app)
 
 
 @app.get("/healthz")

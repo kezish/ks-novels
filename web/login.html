@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>小说 · 登录</title>
+<link rel="stylesheet" href="/assets/login.css">
+</head>
+<body>
+<main>
+<h1>小说书单</h1>
+<p>首次登录后，此浏览器将保持登录状态。</p>
+<form method="post" action="/login">
+<input type="hidden" name="next" value="{{NEXT}}">
+<label for="username">用户名</label>
+<input id="username" name="username" value="ks" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+<label for="password">密码</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<p class="error" role="alert">{{ERROR}}</p>
+<button type="submit">登录</button>
+</form>
+<p class="hint">请使用原有密码。共享设备使用完毕后可退出登录。</p>
+</main>
+</body>
+</html>
