@@ -354,11 +354,31 @@ async function setupSourceKit() {
           const key=row.site+"|"+row.book_url;
           if(seen.has(key))continue;
           seen.add(key);totals[row.site]=(totals[row.site]||0)+1;
-          const item=el("div","job");
-          const detail=el("div","job-main");
-          detail.append(el("div","job-title",row.title||row.book_url),el("div","job-sub",(row.author||"未知作者")+" · "+(info.sites[row.site]||row.site)));
+          const item=el("details","search-book");
+          const summary=el("summary");
+          summary.append(el("span","search-title",row.title||row.book_url),el("span","search-meta",(row.author||"未知作者")+" · "+(info.sites[row.site]||row.site)));
+          const description=el("div","search-description","展开后读取简介");
+          const note=el("div","muted small");
+          const detail=el("div","actions search-actions");
+          let loaded=false,loading=false;
+          async function loadDescription() {
+            if(loaded||loading)return;
+            loading=true;description.textContent="读取简介…";note.replaceChildren();
+            try {
+              const data=await request("/api/sourcekit/detail?"+new URLSearchParams({site:row.site,url:row.book_url}));
+              description.textContent=data.description||"原站暂无简介";
+              note.textContent=data.kind==="excerpt"?"详情页简介（未能识别完整简介边界）":"";
+              loaded=true;
+            }catch(err){
+              description.textContent="简介暂不可用："+err.message;
+              const retry=el("button","minor","重试简介");retry.type="button";
+              retry.addEventListener("click",loadDescription);note.append(retry);
+            }finally{loading=false;}
+          }
+          item.addEventListener("toggle",()=>{if(item.open)loadDescription();});
+          item.append(summary,description,note,detail);
           if(row.direct_url&&row.site==="sk_jiujiu") {
-            const direct=el("a","download","原站 TXT");direct.href=row.direct_url;item.append(detail,direct);
+            const direct=el("a","download","原站 TXT");direct.href=row.direct_url;detail.append(direct);
           } else {
             const button=el("button","minor","加入列表");
             button.type="button";
@@ -367,8 +387,10 @@ async function setupSourceKit() {
               if(!existing.includes(row.book_url))existing.push(row.book_url);
               links.value=existing.join("\n");button.textContent="已加入";
             });
-            item.append(detail,button);
+            detail.append(button);
           }
+          const original=el("a","search-original","原站详情");original.href=row.book_url;
+          original.target="_blank";original.rel="noopener noreferrer";detail.append(original);
           results.append(item);
         }
         status.textContent=Object.entries(states).map(([id,state])=>{

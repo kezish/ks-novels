@@ -54,6 +54,8 @@ echo "$out/测试小说-0123456789abcdef.txt"
             "#!/bin/sh\n"
             "if [ \"$1\" = search ]; then\n"
             "printf '%s\\n' '{\"results\":[{\"site\":\"sk_czbooks\",\"title\":\"測試\",\"author\":\"作者\",\"book_url\":\"https://czbooks.net/n/test1\"}],\"statuses\":{\"sk_czbooks\":{\"state\":\"completed\",\"count\":1}}}'\n"
+            "elif [ \"$1\" = metadata ]; then\n"
+            "printf '%s\\n' '{\"title\":\"測試\",\"author\":\"作者\",\"description\":\"测试简介\"}'\n"
             "else\n"
             "exec " + str(cls.scraper) + " \"$@\"\n"
             "fi\n"
@@ -185,6 +187,16 @@ echo "$out/测试小说-0123456789abcdef.txt"
         self.assertEqual(result["results"][0]["book_url"],"https://czbooks.net/n/test1")
         self.assertEqual(result["statuses"]["sk_czbooks"]["count"],1)
         self.assertEqual(self.req("/api/sourcekit/search",method="POST",data={"keyword":"x","sites":["invalid"]},origin=self.base)[0],422)
+
+    def test_sourcekit_detail_auth_and_metadata(self):
+        from urllib.parse import urlencode
+        url="/api/sourcekit/detail?"+urlencode({"site":"sk_czbooks","url":"https://czbooks.net/n/test1"})
+        self.assertEqual(self.req(url,authenticated=False)[0],401)
+        status,_,body=self.req(url)
+        self.assertEqual(status,200,body)
+        self.assertEqual(json.loads(body)["description"],"测试简介")
+        invalid="/api/sourcekit/detail?"+urlencode({"site":"sk_czbooks","url":"https://127.0.0.1/"})
+        self.assertEqual(self.req(invalid)[0],422)
 
     def test_url_validation_and_origin(self):
         self.assertEqual(

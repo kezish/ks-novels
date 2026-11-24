@@ -304,6 +304,12 @@ async def sourcekit_sources(_: bool = Depends(authorize)):
     return {"enabled": bool(sourcekit.BIN), "sites":sourcekit.ALL_SITES if sourcekit.BIN else {}, "use_52":sourcekit.USE_52}
 
 
+@app.get("/api/sourcekit/detail")
+async def sourcekit_detail(site: str, url: str, _: bool = Depends(authorize)):
+    from search_details import detail
+    return await detail(site,url,DATA/"catalog.sqlite3")
+
+
 @app.post("/api/sourcekit/search")
 async def sourcekit_search(data: SearchSubmission, _: bool = Depends(authorize)):
     try:

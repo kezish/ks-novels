@@ -44,3 +44,14 @@ footer { margin:25px 2px }
 #sourcekit-panel input[type="text"], #search-keyword { width:100%; margin: 0.4rem 0 0.7rem; padding:0.7rem; border:1px solid #64748b; border-radius:0.5rem; font:inherit; }
 .source-option { display:inline-flex; align-items:center; gap:0.25rem; }
 #search-results { margin-top:0.7rem; }
+
+#search-results .search-book { border-bottom:1px solid #e2e6ef; }
+.search-book summary { cursor:pointer; padding:14px 26px 14px 4px; min-height:64px; list-style:none; position:relative; }
+.search-book summary::-webkit-details-marker { display:none; }
+.search-book summary::after { content:'⌄'; position:absolute; right:4px; top:18px; }
+.search-book[open] summary::after { content:'⌃'; }
+.search-title { display:block; font-weight:600; overflow-wrap:anywhere; }
+.search-meta { display:block; font-size:.85rem; color:#667184; margin-top:4px; }
+.search-description { white-space:pre-wrap; line-height:1.75; overflow-wrap:anywhere; margin:8px 4px 16px; }
+.search-actions { margin:8px 4px 16px; }
+.search-original { color:#305bb0; padding:8px; }
