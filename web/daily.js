@@ -1,6 +1,6 @@
 "use strict";
 const $=id=>document.getElementById(id);
-let books=[], generation=0;
+let books=[], generation=0, preview=false, previewStamp=null;
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 async function req(url,options){const r=await fetch(url,options);if(r.status===401){location.assign("/login?next="+encodeURIComponent(location.pathname));throw Error("登录已过期");}if(!r.ok)throw Error("请求失败 "+r.status);return r.json();}
 function shift(day,n){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
@@ -46,8 +46,8 @@ function render(){
 }
 async function load(day){
   const g=++generation;$("date").value=day;$("status").textContent="读取书单…";
-  try{const r=await req("/api/daily/"+day);if(g!==generation)return;books=r.books;
-    $("status").dataset.base=r.published?(books.length+" 本"+(r.partial?" · 部分书源采集未完成":"")):"当天书单尚未生成";
+  try{const r=await req("/api/daily/"+day);if(g!==generation)return;books=r.books;preview=Boolean(r.preview);
+    $("status").dataset.base=r.published?(books.length+" 本"+(r.partial?" · 部分书源采集未完成":"")):(r.preview?"待发布预览 · "+books.length+" 本 · 08:00 正式发布":"当天书单尚未生成");
     const source=$("source"),prior=source.value;source.replaceChildren(el("option","全部"));source.firstChild.value="";
     const available=new Map(books.flatMap(b=>b.sources.map(s=>[s.source,s.label||s.source])));
     for(const [id,name] of available){const o=el("option",name);o.value=id;source.append(o);}source.value=available.has(prior)?prior:"";
@@ -114,7 +114,11 @@ let syncTimer,syncLoading=false;
 async function refreshSync(){
   if(syncLoading)return;
   syncLoading=true;
-  try{showSync(await req("/api/catalog/sync-status"));}
+  try{const data=await req("/api/catalog/sync-status");showSync(data);
+    const stamp=JSON.stringify([data.state,data.books,data.publishing,data.updated]);
+    if(preview && previewStamp!==null && stamp!==previewStamp && data.state!=="running" && !data.publishing) await load($("date").value);
+    previewStamp=stamp;
+  }
   catch(e){$("sync-state").textContent="状态暂不可用";}
   syncLoading=false;
   clearTimeout(syncTimer);

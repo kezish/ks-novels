@@ -83,8 +83,13 @@ def publish(path, day=None):
         db.execute('INSERT INTO notification_outbox(day) VALUES(?)',(day,))
     return True
 
-def books_for(db,day):
-    rows=db.execute('''SELECT b.* FROM books b JOIN edition_items e ON b.id=e.book_id
+def books_for(db,day,*,preview=False):
+    if preview:
+        rows=db.execute("""SELECT b.* FROM books b WHERE NOT EXISTS
+          (SELECT 1 FROM edition_items e WHERE e.book_id=b.id)
+          ORDER BY b.first_seen DESC,b.id DESC""").fetchall()
+    else:
+        rows=db.execute('''SELECT b.* FROM books b JOIN edition_items e ON b.id=e.book_id
       WHERE e.day=? ORDER BY b.first_seen DESC,b.id DESC''',(day,)).fetchall()
     from sources.registry import registry
     adapters=registry()

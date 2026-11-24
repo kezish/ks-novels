@@ -242,12 +242,25 @@ echo "$out/测试小说-0123456789abcdef.txt"
         with connect(path) as db:
             book_id=upsert(db,'52shuku',e,Metadata(e.title,e.author,e.category,'完整简介',e.uploaded),now().isoformat())
         day=now().date().isoformat()
+        code,_,body=self.req('/api/daily/'+day)
+        self.assertEqual(code,200)
+        preview=json.loads(body)
+        self.assertTrue(preview['preview'])
+        self.assertFalse(preview['published'])
+        self.assertEqual(preview['books'][0]['title'],'测试书单')
+        from datetime import timedelta
+        yesterday=(now().date()-timedelta(days=1)).isoformat()
+        self.assertEqual(json.loads(self.req('/api/daily/'+yesterday)[2])['books'],[])
+        with connect(path) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM edition_items').fetchone()[0],0)
         publish(path,day)
         self.assertEqual(self.req('/daily')[0],200)
         self.assertEqual(self.req('/api/daily/'+day,authenticated=False)[0],401)
         code,_,body=self.req('/api/daily/'+day)
         self.assertEqual(code,200)
         self.assertEqual(json.loads(body)['books'][0]['title'],'测试书单')
+        self.assertFalse(json.loads(body)['preview'])
+        self.assertTrue(json.loads(body)['published'])
         code,_,body=self.req('/api/books/'+str(book_id)+'/download',method='POST',data={'source':'52shuku'},origin=self.base)
         self.assertEqual(code,200,body)
         job=json.loads(body)['job']

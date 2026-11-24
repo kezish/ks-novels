@@ -49,7 +49,9 @@ def install(app, *, path, static, authorize, job_connect, book_dir, normalize_ur
         ready()
         with connect(path) as db:
             e=db.execute('SELECT * FROM editions WHERE day=?',(day.isoformat(),)).fetchone()
-            return {'day':day.isoformat(),'published':bool(e),'partial':bool(e['partial']) if e else False,'books':books_for(db,day.isoformat()) if e else []}
+            preview=e is None and day==now().date()
+            books=books_for(db,day.isoformat(),preview=preview) if e or preview else []
+            return {'day':day.isoformat(),'published':bool(e),'preview':preview,'partial':bool(e['partial']) if e else False,'books':books}
     @router.get('/api/books/{book_id}/direct')
     def direct(book_id: int, source: str='jiujiu', external_id: str | None=None):
         row=selected(book_id,source,external_id)
