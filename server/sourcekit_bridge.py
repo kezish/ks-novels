@@ -40,14 +40,17 @@ def command(url,books,data):
         return None
     return [BIN,"download",url,"--output-dir",str(books),"--cache-dir",str(data/"sourcekit-cache")]
 
-async def search_live(keyword,sites):
+async def search_live(keyword,sites,cursors=None):
     if not BIN:raise HTTPException(503,"SourceKit 尚未启用")
     if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>3 or any(s not in SITES for s in sites):
         raise HTTPException(422,"无效搜索参数")
     async with SEARCH_LIMIT:
-        proc=await asyncio.create_subprocess_exec(BIN,"search",keyword,"--sites",*dict.fromkeys(sites),stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        args=[BIN,"search","--sites",*dict.fromkeys(sites)]
+        if cursors:args.extend(["--cursors",json.dumps(cursors)])
+        args.extend(["--",keyword])
+        proc=await asyncio.create_subprocess_exec(*args,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
         try:
-            out,err=await asyncio.wait_for(proc.communicate(),timeout=30)
+            out,err=await asyncio.wait_for(proc.communicate(),timeout=40)
         except (asyncio.TimeoutError,asyncio.CancelledError):
             if proc.returncode is None:proc.kill()
             await proc.wait()
@@ -67,9 +70,14 @@ async def search_live(keyword,sites):
                 if item["site"]=="sk_shuku52" and not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_-]+\.html",urlsplit(item["book_url"]).path):continue
                 rows.append({k:str(item.get(k,""))[:1200] for k in ("site","title","author","book_url")})
             except (ValueError,KeyError,TypeError):continue
-        return {"results":rows,"statuses":{s:data["statuses"].get(s,{"state":"unknown"}) for s in sites}}
+        statuses={}
+        for site in sites:
+            st=dict(data["statuses"].get(site,{"state":"unknown"}))
+            st["count"]=sum(r["site"]==site for r in rows)
+            statuses[site]=st
+        return {"results":rows,"statuses":statuses}
 
-def search_catalog(keyword,path):
+def search_catalog(keyword,path,page=1):
     """Literal local catalog search, not an equivalent of the full site search."""
     from catalog.store import connect,init
     from catalog.dedup import normalize
@@ -85,8 +93,8 @@ def search_catalog(keyword,path):
         rows=db.execute("""SELECT book_id,external_id,title,author,url
             FROM book_sources WHERE source='jiujiu' AND
             (instr(novel_norm(title),?)>0 OR instr(novel_norm(author),?)>0)
-            ORDER BY CASE WHEN novel_norm(title)=? THEN 0 ELSE 1 END,uploaded DESC LIMIT 30""",
-            (term,term,term)).fetchall()
+            ORDER BY CASE WHEN novel_norm(title)=? THEN 0 ELSE 1 END,uploaded DESC,external_id LIMIT 101 OFFSET ?""",
+            (term,term,term,(page-1)*100)).fetchall()
     from urllib.parse import urlencode
     result=[]
     for row in rows:
@@ -96,20 +104,26 @@ def search_catalog(keyword,path):
         result.append(dict(site=CATALOG_SITE,title=row["title"],author=row["author"],book_url=row["url"],direct_url=direct))
     return result
 
-async def search(keyword,sites,catalog_path=None):
+async def search(keyword,sites,catalog_path=None,cursors=None):
+    cursors=cursors or {}
+    if any(s not in sites or type(n) is not int or not 1<=n<=10000 for s,n in cursors.items()):
+        raise HTTPException(422,"无效搜索页码")
     if not BIN:raise HTTPException(503,"SourceKit 尚未启用")
     if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>4 or any(s not in ALL_SITES for s in sites):
         raise HTTPException(422,"无效搜索参数")
     live=[s for s in sites if s!=CATALOG_SITE]
     result={"results":[],"statuses":{}}
     if live:
-        try:result=await search_live(keyword,live)
+        try:result=await search_live(keyword,live,{s:n for s,n in cursors.items() if s in live})
         except (HTTPException,OSError,asyncio.TimeoutError):
             if CATALOG_SITE not in sites:raise
             result["statuses"]={s:{"state":"failed"} for s in live}
     if CATALOG_SITE in sites:
         if catalog_path is None:raise HTTPException(503,"本地书单不可用")
-        rows=await asyncio.to_thread(search_catalog,keyword,catalog_path)
+        page=cursors.get(CATALOG_SITE,1)
+        rows=await asyncio.to_thread(search_catalog,keyword,catalog_path,page)
+        more=len(rows)>100
+        rows=rows[:100]
         result["results"].extend(rows)
-        result["statuses"][CATALOG_SITE]={"state":"catalog","count":len(rows),"message":"原站搜索暂不可用；仅查询已同步书单"}
+        result["statuses"][CATALOG_SITE]={"state":"catalog","count":len(rows),"pages":1,"next_page":page+1 if more else None,"message":"原站搜索暂不可用；仅查询已同步书单"}
     return result

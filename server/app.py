@@ -296,6 +296,7 @@ async def stylesheet(_: bool = Depends(authorize)):
 class SearchSubmission(BaseModel):
     keyword: str = Field(min_length=1,max_length=100)
     sites: list[str] = Field(min_length=1,max_length=4)
+    cursors: dict[str,int] = Field(default_factory=dict)
 
 
 @app.get("/api/sourcekit/sources")
@@ -306,7 +307,7 @@ async def sourcekit_sources(_: bool = Depends(authorize)):
 @app.post("/api/sourcekit/search")
 async def sourcekit_search(data: SearchSubmission, _: bool = Depends(authorize)):
     try:
-        return await sourcekit.search(data.keyword,data.sites,DATA/"catalog.sqlite3")
+        return await sourcekit.search(data.keyword,data.sites,DATA/"catalog.sqlite3",data.cursors)
     except asyncio.TimeoutError as exc:
         raise HTTPException(504,"书源搜索超时") from exc
     except OSError as exc:

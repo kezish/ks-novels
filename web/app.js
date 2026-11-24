@@ -329,57 +329,74 @@ async function setupSourceKit() {
       const input = document.createElement("input");
       input.type = "checkbox";
       input.value = id;
-      input.checked = id !== "sk_czbooks";
+      input.checked = true;
       label.append(input, document.createTextNode(" " + name));
       sources.append(label);
     }
-    document.querySelector("#sourcekit-search").addEventListener("submit", async event => {
-      event.preventDefault();
-      const keyword = document.querySelector("#search-keyword").value.trim();
-      const ids = [...sources.querySelectorAll("input:checked")].map(input => input.value);
-      if (!keyword || !ids.length) { status.textContent = "请选择书源并输入关键词。"; return; }
-      searchButton.disabled = true;
-      status.textContent = "搜索中…";
-      results.replaceChildren();
+    let activeKeyword="", seen=new Set(), totals={}, cursors={}, states={};
+    const more=el("button","minor","继续加载");
+    more.type="button";more.hidden=true;
+    results.after(more);
+    async function perform(keyword,ids,requestedCursors,append) {
+      searchButton.disabled=true;more.disabled=true;
+      status.textContent=append?"正在加载更多…":"搜索中…";
+      if(!append) {
+        results.replaceChildren();seen=new Set();totals={};cursors={};states={};
+      }
       try {
-        const data = await request("/api/sourcekit/search", {method:"POST",body:JSON.stringify({keyword,sites:ids})});
-        status.textContent = Object.entries(data.statuses).map(([id, state]) => {
-          const name = info.sites[id] || id;
-          if (state.state === "catalog") return name + "：" + (state.count || 0) + " 条（仅已同步书单）";
-          if (state.state === "blocked") return name + "：站点要求浏览器验证";
-          if (state.state === "failed") return name + "：搜索失败";
-          if (state.state !== "completed") return name + "：状态未知";
-          return name + "：" + (state.count || 0) + " 条";
-        }).join(" · ");
-        for (const row of data.results) {
-          const item = el("div", "job");
-          const detail = el("div", "job-main");
-          detail.append(el("div","job-title",row.title || row.book_url),el("div","job-sub",(row.author || "未知作者")+" · "+(info.sites[row.site] || row.site)));
-          if (row.direct_url && row.site === "sk_jiujiu") {
-            const direct = el("a","download","原站 TXT");
-            direct.href = row.direct_url;
-            item.append(detail,direct);results.append(item);
-            continue;
+        const data=await request("/api/sourcekit/search",{method:"POST",body:JSON.stringify({keyword,sites:ids,cursors:requestedCursors})});
+        for(const [id,state] of Object.entries(data.statuses)) {
+          states[id]=state;
+          if(Number.isInteger(state.next_page)&&state.next_page>0)cursors[id]=state.next_page;
+          else delete cursors[id];
+        }
+        for(const row of data.results) {
+          const key=row.site+"|"+row.book_url;
+          if(seen.has(key))continue;
+          seen.add(key);totals[row.site]=(totals[row.site]||0)+1;
+          const item=el("div","job");
+          const detail=el("div","job-main");
+          detail.append(el("div","job-title",row.title||row.book_url),el("div","job-sub",(row.author||"未知作者")+" · "+(info.sites[row.site]||row.site)));
+          if(row.direct_url&&row.site==="sk_jiujiu") {
+            const direct=el("a","download","原站 TXT");direct.href=row.direct_url;item.append(detail,direct);
+          } else {
+            const button=el("button","minor","加入列表");
+            button.type="button";
+            button.addEventListener("click",()=>{
+              const existing=links.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+              if(!existing.includes(row.book_url))existing.push(row.book_url);
+              links.value=existing.join("\n");button.textContent="已加入";
+            });
+            item.append(detail,button);
           }
-          const button = el("button","minor","加入列表");
-          button.type = "button";
-          button.addEventListener("click", () => {
-            const existing = links.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-            if (!existing.includes(row.book_url)) existing.push(row.book_url);
-            links.value = existing.join("\n");
-            button.textContent = "已加入";
-          });
-          item.append(detail,button);results.append(item);
+          results.append(item);
         }
-        if (data.statuses.sk_czbooks && ["blocked","failed"].includes(data.statuses.sk_czbooks.state)) {
-          const manual = el("a","download","在小说狂人原站搜索");
-          manual.href = "https://czbooks.net/s/"+encodeURIComponent(keyword);
-          manual.target = "_blank";manual.rel = "noopener noreferrer";
-          results.append(manual);
+        status.textContent=Object.entries(states).map(([id,state])=>{
+          const name=info.sites[id]||id;
+          const count=totals[id]||0;
+          let tail=cursors[id]?" · 可继续加载":"";
+          if(state.state==="catalog")tail+=" · 仅已同步书单";
+          else if(state.state==="blocked")tail+=" · 原站要求浏览器验证";
+          else if(state.state==="failed")tail+=" · 部分请求失败";
+          else if(state.state!=="completed")tail+=" · 状态未知";
+          return name+"：已获取 "+count+" 条"+tail;
+        }).join(" | ");
+        if(data.statuses.sk_czbooks&&["blocked","failed"].includes(data.statuses.sk_czbooks.state)&&!results.querySelector("[data-cz-manual]")){
+          const manual=el("a","download","在小说狂人原站搜索");
+          manual.dataset.czManual="1";manual.href="https://czbooks.net/s/"+encodeURIComponent(keyword);
+          manual.target="_blank";manual.rel="noopener noreferrer";results.append(manual);
         }
-      } catch(err) {status.textContent = "搜索失败："+err.message;}
-      finally {searchButton.disabled=false;}
+      }catch(err){status.textContent="搜索失败："+err.message+(append?"（已保留此前结果，可重试）":"");}
+      finally{more.hidden=Object.keys(cursors).length===0;searchButton.disabled=false;more.disabled=false;}
+    }
+    document.querySelector("#sourcekit-search").addEventListener("submit",async event=>{
+      event.preventDefault();
+      const keyword=document.querySelector("#search-keyword").value.trim();
+      const ids=[...sources.querySelectorAll("input:checked")].map(input=>input.value);
+      if(!keyword||!ids.length){status.textContent="请选择书源并输入关键词。";return;}
+      activeKeyword=keyword;await perform(keyword,ids,{},false);
     });
+    more.addEventListener("click",()=>perform(activeKeyword,Object.keys(cursors),{...cursors},true));
   } catch (_) { /* Keep the original 52 download page available. */ }
 }
 setupSourceKit();

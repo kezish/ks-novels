@@ -44,3 +44,37 @@ class BridgeTests(unittest.TestCase):
             self.assertEqual(len(result["results"]),1)
             self.assertTrue(result["results"][0]["direct_url"].startswith("/api/books/"))
             self.assertEqual(b.search_catalog("%",path),[])
+
+    def test_cursor_forwarding_and_invalid_page(self):
+        from fastapi import HTTPException
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/"fake"
+            p.write_text("""#!/bin/sh
+test "$1" = search && test "$2" = --sites && test "$3" = sk_biquge5 && test "$4" = --cursors && test "$5" = '{"sk_biquge5": 4}' && test "$6" = -- && test "$7" = 'test' || exit 9
+printf '%s' '{"results":[{"site":"sk_biquge5","title":"合成","author":"作者","book_url":"https://www.biquge5.com/123/"}],"statuses":{"sk_biquge5":{"state":"completed","count":1,"pages":3,"next_page":7}}}'
+""")
+            p.chmod(0o700)
+            with patch.object(b,"BIN",str(p)):
+                r=asyncio.run(b.search("test",["sk_biquge5"],cursors={"sk_biquge5":4}))
+                self.assertEqual(r["statuses"]["sk_biquge5"]["next_page"],7)
+                with self.assertRaises(HTTPException):
+                    asyncio.run(b.search("test",["sk_biquge5"],cursors={"sk_biquge5":0}))
+
+    def test_catalog_pagination(self):
+        from catalog.store import init,connect,upsert
+        from sources.base import Entry,Metadata
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"catalog.sqlite3"
+            init(path)
+            with connect(path) as db:
+                for i in range(101):
+                    e=Entry(str(i),f"https://www.ijjxsxzw.com/txt/{i}.html",f"合成小说{i}","合成作者","言情","2026-11-24","latest_upload")
+                    upsert(db,"jiujiu",e,Metadata(e.title,e.author,e.category,"合成简介",e.uploaded),"2026-11-24")
+            with patch.object(b,"BIN","/fake"):
+                a=asyncio.run(b.search("合成作者",["sk_jiujiu"],path))
+                c=asyncio.run(b.search("合成作者",["sk_jiujiu"],path,{"sk_jiujiu":2}))
+            self.assertEqual(len(a["results"]),100)
+            self.assertEqual(a["statuses"]["sk_jiujiu"]["next_page"],2)
+            self.assertEqual(len(c["results"]),1)
+            self.assertIsNone(c["statuses"]["sk_jiujiu"]["next_page"])
+            self.assertNotIn(c["results"][0]["book_url"],{x["book_url"] for x in a["results"]})
