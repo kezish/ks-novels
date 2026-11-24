@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 from .store import init,connect,books_for,now
 from sources.registry import registry
+from .progress import status as sync_status
 
 class DownloadRequest(BaseModel):
     source: str | None = None
@@ -33,6 +34,11 @@ def install(app, *, path, static, authorize, job_connect, book_dir, normalize_ur
     @router.get('/assets/daily.css')
     def css():
         return FileResponse(static/'daily.css',media_type='text/css; charset=utf-8')
+    @router.get('/api/catalog/sync-status')
+    def catalog_sync_status():
+        ready()
+        return sync_status(path)
+
     @router.get('/api/daily')
     def editions():
         ready()

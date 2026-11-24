@@ -120,3 +120,5 @@ Go 队列按需生成单本 TXT，完成后保存或手动点击保存。原批�
 ## 登录会话
 
 使用原有账号和密码登录，浏览器保存 HttpOnly、SameSite=Lax 的持久化 Cookie（HTTPS 下额外启用 Secure 和 __Host- 前缀）。会话哈希存于 sessions.sqlite3；不记录明文会话令牌。服务重启及更新保留会话，退出登录撤销当前会话，主密码变更在服务重启后撤销旧会话。登录失败限制按客户端 IP 和全局计数，认证策略由 nixos-config 管理。HTTP Basic Auth 已取消；API 调用也使用会话。生产环境的登录参数：NOVELS_SESSION_MAX_DAYS、NOVELS_SESSION_IDLE_DAYS、NOVELS_LOGIN_MAX_FAILURES、NOVELS_LOGIN_WINDOW_SECONDS。
+
+每日书单顶部提供实时同步进度，读取受会话保护的 /api/catalog/sync-status；显示各书源阶段、当前页真实计数、累计入库及错误。原站不提供筛选日期范围内的准确总数，阶段进度不等同于小说总量百分比。当前已运行的旧版本采集器通过 CLI 文件锁和数据库统计显示活动及入库数；下一轮起记录完整进度。系统定时任务及其触发方式仍全部由 nixos-config 管理。

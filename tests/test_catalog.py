@@ -58,6 +58,30 @@ class CatalogTests(unittest.TestCase):
         tomorrow=(now().date()+timedelta(days=1)).isoformat()
         publish(self.path,tomorrow)
         with connect(self.path) as db: self.assertEqual(books_for(db,tomorrow),[])
+    def test_live_progress_and_interruption(self):
+        import fcntl
+        from catalog.progress import Progress,status
+        class Adapter:
+            modes=('latest_upload',)
+            display_name='测试书源'
+        with (self.path.parent/'catalog-sync.lock').open('a') as lock:
+            fcntl.flock(lock,fcntl.LOCK_EX)
+            legacy=status(self.path)
+            self.assertEqual(legacy['state'],'running')
+            self.assertTrue(legacy['legacy'])
+            p=Progress(self.path,{'test':Adapter()})
+            stage=p.start(0,'2026-11-17')
+            stage.update(page=2,page_total=10,page_done=4,processed=14)
+            p.write()
+            active=status(self.path)
+            self.assertEqual(active['state'],'running')
+            self.assertEqual(active['stages'][0]['page_done'],4)
+            self.assertTrue(active['lock_busy'])
+        self.assertEqual(status(self.path)['state'],'interrupted')
+        p.finish(stage,True,'')
+        p.end()
+        self.assertEqual(status(self.path)['state'],'done')
+
     def test_sync_failure_no_watermark(self):
         stamp=now().date().isoformat()
         class Adapter:
@@ -69,6 +93,12 @@ class CatalogTests(unittest.TestCase):
                 if e.external_id=='1': raise ValueError('故障')
                 return Metadata(e.title,e.author,e.category,'简介',e.uploaded)
         result=sync(self.path,{'test':Adapter()})
+        from catalog.progress import status
+        progress=status(self.path)
+        self.assertEqual(progress['state'],'failed')
+        self.assertEqual(progress['stages'][0]['errors'],1)
+        self.assertEqual(progress['stages'][0]['added_sources'],1)
+        self.assertEqual(progress['stages'][0]['page_done'],2)
         self.assertFalse(result[0][2])
         with connect(self.path) as db:
             self.assertEqual(db.execute('SELECT count(*) FROM sync_state').fetchone()[0],0)

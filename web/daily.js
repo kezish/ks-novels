@@ -63,3 +63,62 @@ for(const id of ["source","category","mode"])$(id).onchange=render;
 (async()=>{const match=location.pathname.match(/^\/daily\/(\d{4}-\d{2}-\d{2})$/);if(match)return load(match[1]);
 try{const r=await req("/api/daily");if(r.editions.length)return load(r.editions[0].day);}catch(e){}
 const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Singapore",year:"numeric",month:"2-digit",day:"2-digit"}).formatToParts(new Date());const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));load(p.year+"-"+p.month+"-"+p.day);})();
+
+const syncModes={latest_upload:"最新上传",new_book:"只看新书"};
+function showSync(data){
+  const progress=$("sync-progress"),stages=data.stages||[],state=data.state;
+  const done=stages.filter(s=>s.state==="done").length;
+  const ended=stages.filter(s=>s.state==="done"||s.state==="failed").length;
+  const active=state==="running"?stages[data.current]:null;
+  const labels={running:"同步中",done:"同步完成",failed:"同步部分失败",interrupted:"同步中断",idle:"等待首次同步"};
+  $("sync-state").textContent=data.publishing?"正在发布书单":labels[state]||state;
+  progress.max=Math.max(stages.length,1);
+  // Source stages have different amounts of work. Never present this as a
+  // percentage of all books; the upstream does not provide a cutoff count.
+  if(state==="running"&&(!active||!stages.length))progress.removeAttribute("value");
+  else if(stages.length)progress.value=ended;
+  else progress.value=state==="done"?1:0;
+  $("sync-info").textContent="已入库 "+data.books+" 本"+(stages.length?" · 已结束 "+ended+"/"+stages.length+" 阶段 · 成功 "+done:"");
+  const src=(data.sources||[]).map(s=>s.label+" "+s.count+" 条").join(" · ");
+  $("sync-page-wrap").hidden=!active;
+  if(active){
+    const bar=$("sync-page-progress");
+    bar.max=Math.max(active.page_total,1);
+    if(active.page_total)bar.value=active.page_done;else bar.removeAttribute("value");
+    $("sync-page-label").textContent="当前页处理进度"+(active.page_total?" · "+active.page_done+"/"+active.page_total:" · 正在读取列表");
+    $("sync-detail").textContent=active.label+" · "+(syncModes[active.mode]||active.mode)+" · 第 "+active.page+" 页"+
+      (active.page_total?"（"+active.page_done+"/"+active.page_total+"）":"")+" · 已处理 "+active.processed+" 条"+
+      (active.oldest?" · 扫描至 "+active.oldest.slice(0,10):"");
+  }else{
+    $("sync-detail").textContent=(data.legacy?"当前采集使用旧版本，详细阶段将在下一轮显示。 ":"")+src;
+  }
+  const container=$("sync-stages");container.replaceChildren();
+  for(const s of stages){
+    const row=el("div",undefined,"sync-row");
+    row.append(el("strong",s.label+" · "+(syncModes[s.mode]||s.mode)),el("span",({pending:"等待",running:"采集中",done:"完成",failed:"失败"})[s.state]||s.state));
+    row.append(el("p","已处理 "+s.processed+" 条 · 新增 "+s.added_sources+" 条 · 失败 "+s.errors+" 条"+(s.cutoff?" · 目标日期 "+s.cutoff:""),"sync-info"));
+    if(s.state==="running"){
+      const bar=el("progress");bar.max=Math.max(s.page_total,1);if(s.page_total)bar.value=s.page_done;
+      bar.setAttribute("aria-label","当前页进度");row.append(bar);
+    }
+    if(s.error)row.append(el("p",s.error,"sync-error"));
+    container.append(row);
+  }
+  if(!stages.length&&src)container.append(el("p",src,"sync-info"));
+  if(data.updated){
+    const time=new Date(data.updated);
+    if(!Number.isNaN(time.getTime()))container.append(el("p","最后更新："+time.toLocaleString("zh-CN",{timeZone:"Asia/Singapore",hour12:false}),"sync-info"));
+  }
+}
+let syncTimer,syncLoading=false;
+async function refreshSync(){
+  if(syncLoading)return;
+  syncLoading=true;
+  try{showSync(await req("/api/catalog/sync-status"));}
+  catch(e){$("sync-state").textContent="状态暂不可用";}
+  syncLoading=false;
+  clearTimeout(syncTimer);
+  syncTimer=setTimeout(refreshSync,document.hidden?30000:5000);
+}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden){clearTimeout(syncTimer);refreshSync();}});
+refreshSync();

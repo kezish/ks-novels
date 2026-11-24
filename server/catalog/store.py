@@ -39,6 +39,7 @@ def init(path):
           PRIMARY KEY(source,external_id,mode), FOREIGN KEY(source,external_id) REFERENCES book_sources(source,external_id));
         CREATE TABLE IF NOT EXISTS sync_state(source TEXT, mode TEXT, success_at TEXT NOT NULL,
           PRIMARY KEY(source,mode));
+        CREATE TABLE IF NOT EXISTS sync_progress(id INTEGER PRIMARY KEY CHECK(id=1), payload TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sync_runs(id INTEGER PRIMARY KEY, source TEXT, mode TEXT, started TEXT, ok INTEGER, error TEXT);
         CREATE TABLE IF NOT EXISTS editions(day TEXT PRIMARY KEY, created TEXT NOT NULL, partial INTEGER NOT NULL);
         CREATE TABLE IF NOT EXISTS edition_items(day TEXT REFERENCES editions(day), book_id INTEGER REFERENCES books(id),

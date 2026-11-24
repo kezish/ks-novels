@@ -149,6 +149,10 @@ echo "$out/测试小说-0123456789abcdef.txt"
     def test_auth_and_static_assets(self):
         self.assertEqual(self.req("/healthz", authenticated=False)[0], 200)
         self.assertEqual(self.req("/api/batches", authenticated=False)[0], 401)
+        self.assertEqual(self.req("/api/catalog/sync-status", authenticated=False)[0],401)
+        code,_,body=self.req("/api/catalog/sync-status")
+        self.assertEqual(code,200)
+        self.assertIn("books",json.loads(body))
         self.assertEqual(self.req("/")[0], 200)
         status, _, html = self.req("/")
         self.assertIn("viewport", html.decode())

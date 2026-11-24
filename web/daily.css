@@ -16,3 +16,12 @@ details[open] summary::after{content:'⌃'}
 .description{white-space:pre-wrap;line-height:1.75;overflow-wrap:anywhere;margin:8px 4px 16px}
 .actions{margin:10px 4px 18px}.download{display:inline-flex;align-items:center;justify-content:center;background:var(--accent);color:white;text-decoration:none;border:0;flex:1;cursor:pointer}
 button:disabled{opacity:.5}.source{margin:4px}.error{color:#c24b40}
+
+.sync-panel{margin:0 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px}
+.sync-head,.sync-row{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.sync-head span,.sync-row span{font-size:.85rem;opacity:.8}
+.sync-panel progress{width:100%;height:8px;accent-color:var(--accent);display:block;margin:10px 0}
+.sync-info{font-size:.85rem;line-height:1.5;margin:5px 0;color:CanvasText;opacity:.85}
+.sync-panel details{border:0}.sync-panel summary{min-height:0;padding:6px 20px 4px 0;font-size:.85rem}.sync-panel summary::after{top:6px}
+.sync-row{border-top:1px solid var(--line);padding:9px 0;font-size:.85rem}.sync-row p,.sync-row progress{flex-basis:100%;margin:0}
+.sync-error{font-size:.8rem;color:#c24b40;overflow-wrap:anywhere}
