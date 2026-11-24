@@ -97,7 +97,7 @@ def books_for(db,day,*,preview=False):
     for r in rows:
         b={k:r[k] for k in ('id','title','author','category','description','first_seen')}
         b['sources']=[]
-        for s in db.execute('SELECT source,external_id,uploaded FROM book_sources WHERE book_id=? ORDER BY source',(r['id'],)):
+        for s in db.execute('SELECT source,external_id,uploaded,url FROM book_sources WHERE book_id=? ORDER BY source',(r['id'],)):
             item=dict(s)
             adapter=adapters.get(s['source'])
             item['label']=adapter.display_name if adapter else s['source']

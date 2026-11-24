@@ -260,6 +260,7 @@ echo "$out/测试小说-0123456789abcdef.txt"
         self.assertTrue(preview['preview'])
         self.assertFalse(preview['published'])
         self.assertEqual(preview['books'][0]['title'],'测试书单')
+        self.assertEqual(preview['books'][0]['sources'][0]['url'],url)
         from datetime import timedelta
         yesterday=(now().date()-timedelta(days=1)).isoformat()
         self.assertEqual(json.loads(self.req('/api/daily/'+yesterday)[2])['books'],[])

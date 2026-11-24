@@ -6,14 +6,14 @@ async function req(url,options){const r=await fetch(url,options);if(r.status===4
 function shift(day,n){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
 function filter(){return books.filter(b=>(!$("category").value||b.category===$("category").value)&&b.sources.some(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value))));}
 function directURL(b,s){return "/api/books/"+b.id+"/direct?"+new URLSearchParams({source:s.source,external_id:s.external_id});}
-function fileLink(button,job){const a=el("a","保存 TXT","download");a.href=job.download_url;a.download=job.filename||"novel.txt";button.replaceWith(a);return a;}
-async function queued(b,s,button){
+async function queued(b,s,button,key){
+  if(button.dataset.file){const a=el("a");a.href=button.dataset.file;a.download=button.dataset.filename||"novel.txt";document.body.append(a);a.click();a.remove();return;}
   button.disabled=true;
   try{
     const r=await req("/api/books/"+b.id+"/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:s.source,external_id:s.external_id})});
     let j=r.job;
     for(;;){
-      if(j.state==="completed"){const a=fileLink(button,j);a.click();return;}
+      if(j.state==="completed"){button.dataset.file=j.download_url;button.dataset.filename=j.filename||"novel.txt";button.textContent="保存 TXT";button.classList.add("done");button.disabled=false;if(!document.hidden)button.click();return;}
       if(!["queued","running","cancelling"].includes(j.state))throw Error(j.error||"任务失败");
       button.textContent=j.state==="queued"?"排队中…":"生成 TXT "+(j.total?Math.floor(100*j.done/j.total)+"%":"…");
       await new Promise(resolve=>setTimeout(resolve,2500));
@@ -21,26 +21,55 @@ async function queued(b,s,button){
     }
   }catch(e){button.textContent="重试下载";button.title=e.message;button.disabled=false;}
 }
+function renderCategories(){
+  const root=$("category-tabs");root.replaceChildren();
+  for(const o of $("category").options){
+    const b=el("button",o.textContent,"category-chip");b.type="button";
+    b.setAttribute("aria-pressed",String(o.value===$("category").value));
+    b.onclick=()=>{$("category").value=o.value;render();};root.append(b);
+  }
+}
+const dailyActions=new Map();
 function render(){
+  renderCategories();
   const list=$("books"),open=new Set([...list.querySelectorAll("details[open]")].map(n=>n.dataset.id));list.replaceChildren();
   const visible=filter();
   for(const b of visible){
-    const d=el("details");d.dataset.id=b.id;d.open=open.has(String(b.id));
-    const summary=el("summary");summary.append(el("span",b.title,"title"),el("span",(b.category||"未分类")+" · "+(b.author||"未知作者"),"meta"));d.append(summary);
-    const desc=el("div",b.description||"暂无简介","description");d.append(desc);
-    d.append(el("div","来源："+b.sources.map(s=>s.label||s.source).join(" · "),"source"));
-    const actions=el("div",undefined,"actions"),select=el("select");select.setAttribute("aria-label","下载书源");
-    const sources=[...b.sources].sort((a,b)=>Number(b.download_kind==="direct")-Number(a.download_kind==="direct"));
+    const card=el("article",undefined,"book"),d=el("details");d.dataset.id=b.id;
+    const summary=el("summary"),main=el("div",undefined,"book-main"),meta=el("div",undefined,"book-meta");
+    const genre=el("span",b.category||"未分类","genre");genre.dataset.genre=b.category||"";
+    meta.append(genre,el("span",b.author||"未知作者"),el("span","· "+b.sources.map(s=>s.label||s.source).join(" / "),"source-note"));
+    main.append(el("span",b.title,"book-title"),meta);summary.append(main,el("span","⌄","chevron"));d.append(summary);
+    const desc=el("div",undefined,"desc"),copy=el("div",b.description||"暂无简介","desc-copy"),actions=el("div",undefined,"desc-actions");
+    desc.append(copy,actions);d.append(desc);card.append(d);
+    const select=el("select",undefined,"source-pick");select.setAttribute("aria-label","下载书源");
+    const sources=[...b.sources].filter(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value))).sort((a,b)=>Number(b.download_kind==="direct")-Number(a.download_kind==="direct"));
     sources.forEach((s,i)=>{const o=el("option",s.label||s.source);o.value=i;select.append(o);});
+    const original=el("a","原站详情 ↗","text-link");original.target="_blank";original.rel="noopener noreferrer";actions.append(original);
+    if(sources.length>1)actions.append(select);
     let current;
+    function place(){
+      if(!current)return;
+      if(d.open)actions.append(current);else card.append(current);
+    }
     function update(){
       if(current)current.remove();const s=sources[Number(select.value)||0];
-      if(s.download_kind==="direct"){current=el("a","下载 TXT","download");current.href=directURL(b,s);}
-      else{current=el("button","下载 TXT","download");if(s.download_kind==="queued"){const button=current;button.addEventListener("click",()=>queued(b,s,button));}else{current.disabled=true;current.textContent="暂不可下载";}}
-      actions.prepend(current);
+      original.hidden=!s.url;if(s.url)original.href=s.url;
+      const key=String(b.id)+"|"+s.source+"|"+s.external_id;
+      if(s.download_kind==="direct"){current=el("a","下载 TXT","book-action");current.href=directURL(b,s);}
+      else if(dailyActions.has(key))current=dailyActions.get(key);
+      else{
+        current=el("button","下载 TXT","book-action");
+        if(s.download_kind==="queued"){
+          const button=current;
+          button.addEventListener("click",()=>queued(b,s,button,key));
+          dailyActions.set(key,button);
+        }else{current.disabled=true;current.textContent="暂不可下载";}
+      }
+      place();
     }
-    if(sources.length>1){actions.append(select);select.addEventListener("change",update);}
-    update();d.append(actions);list.append(d);
+    select.addEventListener("change",update);
+    d.open=open.has(String(b.id));d.addEventListener("toggle",place);update();list.append(card);
   }
   $("status").textContent=($("status").dataset.base||"")+" · 显示 "+visible.length+" 本";
 }

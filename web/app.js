@@ -8,6 +8,79 @@ const folderHint = document.querySelector("#save-hint");
 const submitButton = document.querySelector("#submit");
 const manualSubmitButton = document.querySelector("#queue-only");
 let batches = [];
+const singleJobs = new Map();
+const pendingSingle = new Set();
+let toastTimer;
+function notify(text) {
+  const n=document.querySelector("#toast");
+  if (!n) return;
+  n.textContent=text;n.hidden=false;
+  clearTimeout(toastTimer);toastTimer=setTimeout(()=>n.hidden=true,4000);
+}
+function updateSingleButtons() {
+  const count=document.querySelector("#nav-count");
+  if(count){const n=batches.flatMap(b=>b.jobs).filter(j=>["queued","running","cancelling"].includes(j.state)).length;count.textContent=n;count.hidden=!n;}
+  if(!document.querySelectorAll)return;
+  for(const btn of document.querySelectorAll("button[data-single-url]")){
+    const url=btn.dataset.singleUrl,job=singleJobs.get(url);
+    btn.disabled=pendingSingle.has(url)||!!(job&&["queued","running","cancelling"].includes(job.state));
+    btn.classList.toggle("done",job?.state==="completed");
+    btn.textContent=pendingSingle.has(url)?"提交中…":job?.state==="completed"?"保存 TXT":job?.state==="running"?"生成 "+(job.total?Math.floor(100*job.done/job.total)+"%":"…"):job?.state==="queued"?"排队中…":job?.state==="cancelling"?"取消中…":job?"重试下载":"下载 TXT";
+    btn.title=job?.error||"";
+  }
+}
+function saveSingle(job) {
+  const a=el("a");a.href=job.download_url;a.download=job.filename||"novel.txt";
+  document.body.append(a);a.click();a.remove();
+}
+async function downloadSingle(url) {
+  if(pendingSingle.has(url))return;
+  const previous=singleJobs.get(url);
+  if(previous?.state==="completed"){saveSingle(previous);return;}
+  if(previous&&["queued","running","cancelling"].includes(previous.state))return;
+  pendingSingle.add(url);updateSingleButtons();
+  try {
+    const data=await request("/api/batches",{method:"POST",body:JSON.stringify({urls:[url]})});
+    if(!data.jobs?.length)throw Error("服务器未返回任务");
+    let job=data.jobs[0];singleJobs.set(url,job);
+    pendingSingle.delete(url);updateSingleButtons();notify("已开始单本下载");
+    for(;;){
+      if(job.state==="completed"){
+        // Do not trigger a file download in a background tab. Always retain manual Save.
+        if(!document.hidden)saveSingle(job);
+        notify("TXT 已就绪，如未自动保存请点击「保存 TXT」");break;
+      }
+      if(!["queued","running","cancelling"].includes(job.state)){notify("下载未完成："+(job.error||labels[job.state]||job.state));break;}
+      await new Promise(resolve=>setTimeout(resolve,2500));
+      const batch=await request("/api/batches/"+encodeURIComponent(data.id));
+      job=batch.jobs.find(j=>j.id===job.id);
+      if(!job)throw Error("任务不存在");
+      singleJobs.set(url,job);updateSingleButtons();
+    }
+  }catch(err){
+    // A polling failure must not create another server job automatically.
+    const job=singleJobs.get(url);
+    if(job&&["queued","running","cancelling"].includes(job.state)){
+      notify("任务已提交，请在下载列表查看进度");
+    }else notify("下载失败："+err.message);
+  }finally{pendingSingle.delete(url);updateSingleButtons();await refresh();}
+}
+function setupNavigation(){
+  const search=document.querySelector("#search-page"),queue=document.querySelector("#queue-page");
+  if(!search||!queue)return;
+  function navigate(){
+    const isQueue=location.hash==="#queue";
+    search.hidden=isQueue;queue.hidden=!isQueue;
+    document.querySelector("#heading").textContent=isQueue?"下载列表":"聚合搜索";
+    document.querySelectorAll("[data-page]").forEach(a=>{
+      if(a.dataset.page===(isQueue?"queue":"search"))a.setAttribute("aria-current","page");
+      else a.removeAttribute("aria-current");
+    });
+    if(isQueue)refresh();window.scrollTo(0,0);
+  }
+  window.addEventListener("hashchange",navigate);navigate();
+}
+
 const canSaveDirectory = typeof window.showDirectoryPicker === "function";
 
 // Folder handles are kept only in this tab. The server remains the source of
@@ -219,6 +292,11 @@ async function refresh() {
   try {
     const payload = await request("/api/batches");
     batches = payload.batches;
+    for(const [url,job] of singleJobs){
+      const latest=batches.flatMap(b=>b.jobs).find(j=>j.id===job.id);
+      if(latest)singleJobs.set(url,latest);
+    }
+    updateSingleButtons();
     render();
     enqueueAutoSaves();
   } catch (err) {
@@ -318,7 +396,7 @@ async function setupSourceKit() {
   if (!panel) return;
   try {
     const info = await request("/api/sourcekit/sources");
-    if (!info.enabled) return;
+    if (!info.enabled){document.querySelector("#search-fallback").hidden=false;return;}
     panel.hidden = false;
     const sources = document.querySelector("#search-sources");
     const results = document.querySelector("#search-results");
@@ -333,15 +411,32 @@ async function setupSourceKit() {
       label.append(input, document.createTextNode(" " + name));
       sources.append(label);
     }
+    const dialog=document.querySelector("#source-dialog");
+    function sourceSummary(){
+      const n=sources.querySelectorAll("input:checked").length,total=Object.keys(info.sites).length;
+      document.querySelector("#source-summary").textContent=n===total?"全部 "+n+" 个":n+" 个";
+      document.querySelector("#selected-count").textContent="已选 "+n+" / "+total;
+      document.querySelector("#toggle-all").textContent=n===total?"取消全选":"全部选择";
+    }
+    sources.addEventListener("change",sourceSummary);
+    document.querySelector("#toggle-all").onclick=()=>{
+      const all=[...sources.querySelectorAll("input")],checked=all.every(i=>i.checked);
+      all.forEach(i=>i.checked=!checked);sourceSummary();
+    };
+    document.querySelector("#open-sources").onclick=()=>dialog.showModal();
+    document.querySelector("#source-close").onclick=document.querySelector("#source-done").onclick=()=>dialog.close();
+    dialog.addEventListener("click",e=>{if(e.target===dialog)dialog.close();});
+    sourceSummary();
+    const activity=document.querySelector("#search-activity"),countNode=document.querySelector("#result-count");
     let activeKeyword="", seen=new Set(), totals={}, cursors={}, states={};
-    const more=el("button","minor","继续加载");
+    const more=el("button","more","继续加载");
     more.type="button";more.hidden=true;
     results.after(more);
     async function perform(keyword,ids,requestedCursors,append) {
       searchButton.disabled=true;more.disabled=true;
-      status.textContent=append?"正在加载更多…":"搜索中…";
+      activity.textContent=append?"正在加载更多…":"搜索中…";
       if(!append) {
-        results.replaceChildren();seen=new Set();totals={};cursors={};states={};
+        results.replaceChildren();seen=new Set();totals={};cursors={};states={};countNode.textContent="0";
       }
       try {
         const data=await request("/api/sourcekit/search",{method:"POST",body:JSON.stringify({keyword,sites:ids,cursors:requestedCursors})});
@@ -354,12 +449,13 @@ async function setupSourceKit() {
           const key=row.site+"|"+row.book_url;
           if(seen.has(key))continue;
           seen.add(key);totals[row.site]=(totals[row.site]||0)+1;
-          const item=el("details","search-book");
-          const summary=el("summary");
-          summary.append(el("span","search-title",row.title||row.book_url),el("span","search-meta",(row.author||"未知作者")+" · "+(info.sites[row.site]||row.site)));
-          const description=el("div","search-description","展开后读取简介");
-          const note=el("div","muted small");
-          const detail=el("div","actions search-actions");
+          const item=el("article","book"),fold=el("details"),summary=el("summary"),main=el("div","book-main");
+          main.append(el("span","book-title",row.title||row.book_url));
+          const meta=el("div","book-meta");
+          meta.append(el("span","",(row.author||"未知作者")),el("span","source-note","· "+(info.sites[row.site]||row.site)));
+          main.append(meta);summary.append(main,el("span","chevron","⌄"));
+          const desc=el("div","desc"),description=el("div","desc-copy","展开后读取简介"),note=el("div","search-note"),detail=el("div","desc-actions");
+          desc.append(description,note,detail);
           let loaded=false,loading=false;
           async function loadDescription() {
             if(loaded||loading)return;
@@ -375,22 +471,17 @@ async function setupSourceKit() {
               retry.addEventListener("click",loadDescription);note.append(retry);
             }finally{loading=false;}
           }
-          item.addEventListener("toggle",()=>{if(item.open)loadDescription();});
-          item.append(summary,description,note,detail);
+          let button;
           if(row.direct_url&&row.site==="sk_jiujiu") {
-            const direct=el("a","download","原站 TXT");direct.href=row.direct_url;detail.append(direct);
+            button=el("a","book-action","下载 TXT");button.href=row.direct_url;
           } else {
-            const button=el("button","minor","加入列表");
-            button.type="button";
-            button.addEventListener("click",()=>{
-              const existing=links.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-              if(!existing.includes(row.book_url))existing.push(row.book_url);
-              links.value=existing.join("\n");button.textContent="已加入";
-            });
-            detail.append(button);
+            button=el("button","book-action","下载 TXT");button.type="button";
+            button.dataset.singleUrl=row.book_url;button.addEventListener("click",()=>downloadSingle(row.book_url));
           }
-          const original=el("a","search-original","原站详情");original.href=row.book_url;
+          const original=el("a","text-link","原站详情 ↗");original.href=row.book_url;
           original.target="_blank";original.rel="noopener noreferrer";detail.append(original);
+          fold.append(summary,desc);item.append(fold,button);
+          fold.addEventListener("toggle",()=>{if(fold.open){detail.append(button);loadDescription();}else item.append(button);});
           results.append(item);
         }
         status.textContent=Object.entries(states).map(([id,state])=>{
@@ -402,23 +493,26 @@ async function setupSourceKit() {
           else if(state.state==="failed")tail+=" · 部分请求失败";
           else if(state.state!=="completed")tail+=" · 状态未知";
           return name+"：已获取 "+count+" 条"+tail;
-        }).join(" | ");
+        }).join("\n");
+        countNode.textContent=seen.size;activity.textContent=Object.values(states).some(s=>["blocked","failed"].includes(s.state))?"部分书源异常":"";
+        updateSingleButtons();
         if(data.statuses.sk_czbooks&&["blocked","failed"].includes(data.statuses.sk_czbooks.state)&&!results.querySelector("[data-cz-manual]")){
-          const manual=el("a","download","在小说狂人原站搜索");
+          const manual=el("a","manual-search","在小说狂人原站搜索");
           manual.dataset.czManual="1";manual.href="https://czbooks.net/s/"+encodeURIComponent(keyword);
           manual.target="_blank";manual.rel="noopener noreferrer";results.append(manual);
         }
-      }catch(err){status.textContent="搜索失败："+err.message+(append?"（已保留此前结果，可重试）":"");}
+      }catch(err){activity.textContent="搜索失败";status.textContent="搜索失败："+err.message+(append?"（已保留此前结果，可重试）":"");document.querySelector(".source-report").open=true;}
       finally{more.hidden=Object.keys(cursors).length===0;searchButton.disabled=false;more.disabled=false;}
     }
     document.querySelector("#sourcekit-search").addEventListener("submit",async event=>{
       event.preventDefault();
       const keyword=document.querySelector("#search-keyword").value.trim();
       const ids=[...sources.querySelectorAll("input:checked")].map(input=>input.value);
-      if(!keyword||!ids.length){status.textContent="请选择书源并输入关键词。";return;}
+      if(!keyword||!ids.length){activity.textContent="请选择书源并输入关键词。";return;}
       activeKeyword=keyword;await perform(keyword,ids,{},false);
     });
     more.addEventListener("click",()=>perform(activeKeyword,Object.keys(cursors),{...cursors},true));
-  } catch (_) { /* Keep the original 52 download page available. */ }
+  } catch (_) { const fallback=document.querySelector("#search-fallback");if(fallback)fallback.hidden=false; }
 }
+setupNavigation();
 setupSourceKit();

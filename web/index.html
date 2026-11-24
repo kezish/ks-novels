@@ -3,32 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#171f2e">
+  <meta name="theme-color" content="#f2f4f3">
   <title>小说 TXT 下载</title>
-  <link rel="stylesheet" href="/assets/style.css">
-  <script src="/assets/app.js" defer></script>
+  <link rel="stylesheet" href="/assets/style.css?v=6">
+  <script src="/assets/app.js?v=6" defer></script>
 </head>
 <body>
   <main class="container">
-    <header>
-      <div class="eyebrow">多书源 · TXT 下载</div>
-      <h1>小说下载</h1>
-      <p><a href="/daily">每日新书</a></p>
-      <form method="post" action="/logout"><button class="secondary" type="submit">退出登录</button></form>
-      <p class="muted">粘贴小说主页链接，每行一本。服务器处理完成后，将独立 TXT 保存到当前设备。</p>
-    </header>
-    <section class="card" id="sourcekit-panel" hidden aria-label="多书源搜索">
-      <h2>小说搜索</h2>
-      <form id="sourcekit-search">
-        <label for="search-keyword">书名或作者</label>
-        <input id="search-keyword" maxlength="100" required autocomplete="off" placeholder="输入书名或作者">
-        <div id="search-sources" class="actions"></div>
-        <div class="actions"><button type="submit" id="search-submit">搜索</button></div>
+    <header class="top"><div class="brand"><h1>ks-novels</h1><span id="heading">聚合搜索</span></div><form method="post" action="/logout"><button class="quiet" type="submit">退出</button></form></header>
+    <section id="search-page" aria-label="聚合搜索">
+    <section id="sourcekit-panel" hidden aria-label="多书源搜索">
+      <div class="search-panel">
+      <form id="sourcekit-search" class="search-form">
+        <div class="field"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input id="search-keyword" type="search" maxlength="100" required autocomplete="off" placeholder="搜索书名 / 作者" aria-label="搜索书名或作者"></div>
+        <button type="submit" id="search-submit">搜索</button>
       </form>
-      <div id="search-status" class="muted small" role="status"></div>
-      <div id="search-results" aria-live="polite"></div>
-      <p class="muted small">选择结果加入下方链接列表，再批量下载。久久仅搜索已同步书单，可直接下载原站 TXT。</p>
+      <div class="search-options"><button id="open-sources" type="button" class="quiet">书源 <span id="source-summary">全部</span> ⌄</button><span class="small muted">单本下载</span></div>
+      </div>
+      <dialog id="source-dialog" aria-labelledby="source-dialog-title">
+        <div class="row"><h2 id="source-dialog-title">搜索书源</h2><button id="source-close" class="quiet" type="button" aria-label="关闭">×</button></div>
+        <div class="sheet-tools"><span id="selected-count"></span><button id="toggle-all" class="quiet" type="button">取消全选</button></div>
+        <div id="search-sources"></div><button id="source-done" class="sheet-done" type="button">完成</button>
+      </dialog>
+      <div class="result-head"><h2>搜索结果 <strong id="result-count">0</strong> <span class="small muted">条</span></h2><span id="search-activity" class="small muted" role="status"></span></div>
+      <details class="source-report"><summary>各站搜索状态</summary><div id="search-status" class="small muted" role="status">输入书名或作者开始搜索</div></details>
+      <div id="search-results" class="book-list" aria-live="polite"></div>
+      <p class="small muted footnote">单本下载完成后可直接保存 TXT；久久仅查询已同步书单。</p>
     </section>
+    <p id="search-fallback" hidden class="empty">多书源搜索暂不可用，请使用下载列表中的手动链接入口。</p>
+    </section>
+    <section id="queue-page" hidden aria-label="下载列表">
     <section class="card" aria-label="提交小说">
       <form id="submit-form">
         <label for="links">小说主页链接</label>
@@ -57,6 +61,8 @@
     <footer class="muted small">
       文件在服务器上只临时保留 12 小时。支持文件夹授权的浏览器可一次选择、逐本自动保存（请保持本页打开）；iPhone Chrome 需逐本点击下载。
     </footer>
+    </section>
   </main>
+  <nav class="bottom" aria-label="主导航"><a class="nav-button" href="/#search" data-page="search" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>搜索</a><a class="nav-button" href="/daily"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linejoin="round"><path d="M12 5c-3-2-6-2-10-1v15c4-1 7-1 10 1 3-2 6-2 10-1V4c-4-1-7-1-10 1zM12 5v15"/></svg>每日新书</a><a class="nav-button" href="/#queue" data-page="queue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5"/></svg>下载列表<span class="count" id="nav-count" hidden></span></a></nav><div id="toast" role="status" hidden></div>
 </body>
 </html>
