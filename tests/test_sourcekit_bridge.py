@@ -27,3 +27,20 @@ class BridgeTests(unittest.TestCase):
                 result=asyncio.run(b.search("test",["sk_biquge5","sk_czbooks"]))
                 self.assertEqual(len(result["results"]),1)
                 self.assertEqual(result["statuses"]["sk_czbooks"]["state"],"blocked")
+
+    def test_catalog_search(self):
+        from catalog.store import init,connect,upsert
+        from sources.base import Entry,Metadata
+        with tempfile.TemporaryDirectory() as d:
+            path=Path(d)/"catalog.sqlite3"
+            init(path)
+            entry=Entry("123","https://www.ijjxsxzw.com/txt/123.html","合成小说","合成作者","言情","2026-11-24","latest_upload")
+            meta=Metadata("合成小说","合成作者","言情","合成简介","2026-11-24")
+            with connect(path) as db:
+                upsert(db,"jiujiu",entry,meta,"2026-11-24")
+            with patch.object(b,"BIN","/fake"):
+                result=asyncio.run(b.search("合成作者",["sk_jiujiu"],path))
+            self.assertEqual(result["statuses"]["sk_jiujiu"]["state"],"catalog")
+            self.assertEqual(len(result["results"]),1)
+            self.assertTrue(result["results"][0]["direct_url"].startswith("/api/books/"))
+            self.assertEqual(b.search_catalog("%",path),[])

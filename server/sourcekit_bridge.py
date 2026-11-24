@@ -11,6 +11,8 @@ BIN=os.environ.get("NOVELS_SOURCEKIT_BIN","")
 USE_52=os.environ.get("NOVELS_SOURCEKIT_52","0")=="1"
 SITES={"sk_shuku52":"52书库","sk_biquge5":"笔趣阁5","sk_czbooks":"小说狂人"}
 SEARCH_LIMIT=asyncio.Semaphore(2)
+CATALOG_SITE="sk_jiujiu"
+ALL_SITES={**SITES,CATALOG_SITE:"久久小说（本地书单）"}
 
 def classify(url):
     u=urlsplit(url)
@@ -38,7 +40,7 @@ def command(url,books,data):
         return None
     return [BIN,"download",url,"--output-dir",str(books),"--cache-dir",str(data/"sourcekit-cache")]
 
-async def search(keyword,sites):
+async def search_live(keyword,sites):
     if not BIN:raise HTTPException(503,"SourceKit 尚未启用")
     if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>3 or any(s not in SITES for s in sites):
         raise HTTPException(422,"无效搜索参数")
@@ -66,3 +68,48 @@ async def search(keyword,sites):
                 rows.append({k:str(item.get(k,""))[:1200] for k in ("site","title","author","book_url")})
             except (ValueError,KeyError,TypeError):continue
         return {"results":rows,"statuses":{s:data["statuses"].get(s,{"state":"unknown"}) for s in sites}}
+
+def search_catalog(keyword,path):
+    """Literal local catalog search, not an equivalent of the full site search."""
+    from catalog.store import connect,init
+    from catalog.dedup import normalize
+    path=Path(path)
+    path.parent.mkdir(parents=True,exist_ok=True)
+    init(path)
+    term=normalize(keyword)
+    if not term:
+        return []
+    with connect(path) as db:
+        # Normalize in the query to preserve Unicode title/author matching.
+        db.create_function("novel_norm",1,normalize,deterministic=True)
+        rows=db.execute("""SELECT book_id,external_id,title,author,url
+            FROM book_sources WHERE source='jiujiu' AND
+            (instr(novel_norm(title),?)>0 OR instr(novel_norm(author),?)>0)
+            ORDER BY CASE WHEN novel_norm(title)=? THEN 0 ELSE 1 END,uploaded DESC LIMIT 30""",
+            (term,term,term)).fetchall()
+    from urllib.parse import urlencode
+    result=[]
+    for row in rows:
+        if not re.fullmatch(r"https://www\.ijjxsxzw\.com/txt/[0-9]+\.html",row["url"]):
+            continue
+        direct=f"/api/books/{row['book_id']}/direct?"+urlencode({"source":"jiujiu","external_id":row["external_id"]})
+        result.append(dict(site=CATALOG_SITE,title=row["title"],author=row["author"],book_url=row["url"],direct_url=direct))
+    return result
+
+async def search(keyword,sites,catalog_path=None):
+    if not BIN:raise HTTPException(503,"SourceKit 尚未启用")
+    if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>4 or any(s not in ALL_SITES for s in sites):
+        raise HTTPException(422,"无效搜索参数")
+    live=[s for s in sites if s!=CATALOG_SITE]
+    result={"results":[],"statuses":{}}
+    if live:
+        try:result=await search_live(keyword,live)
+        except (HTTPException,OSError,asyncio.TimeoutError):
+            if CATALOG_SITE not in sites:raise
+            result["statuses"]={s:{"state":"failed"} for s in live}
+    if CATALOG_SITE in sites:
+        if catalog_path is None:raise HTTPException(503,"本地书单不可用")
+        rows=await asyncio.to_thread(search_catalog,keyword,catalog_path)
+        result["results"].extend(rows)
+        result["statuses"][CATALOG_SITE]={"state":"catalog","count":len(rows),"message":"原站搜索暂不可用；仅查询已同步书单"}
+    return result

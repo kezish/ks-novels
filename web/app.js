@@ -345,6 +345,7 @@ async function setupSourceKit() {
         const data = await request("/api/sourcekit/search", {method:"POST",body:JSON.stringify({keyword,sites:ids})});
         status.textContent = Object.entries(data.statuses).map(([id, state]) => {
           const name = info.sites[id] || id;
+          if (state.state === "catalog") return name + "：" + (state.count || 0) + " 条（仅已同步书单）";
           if (state.state === "blocked") return name + "：站点要求浏览器验证";
           if (state.state === "failed") return name + "：搜索失败";
           if (state.state !== "completed") return name + "：状态未知";
@@ -354,6 +355,12 @@ async function setupSourceKit() {
           const item = el("div", "job");
           const detail = el("div", "job-main");
           detail.append(el("div","job-title",row.title || row.book_url),el("div","job-sub",(row.author || "未知作者")+" · "+(info.sites[row.site] || row.site)));
+          if (row.direct_url && row.site === "sk_jiujiu") {
+            const direct = el("a","download","原站 TXT");
+            direct.href = row.direct_url;
+            item.append(detail,direct);results.append(item);
+            continue;
+          }
           const button = el("button","minor","加入列表");
           button.type = "button";
           button.addEventListener("click", () => {
