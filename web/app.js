@@ -312,3 +312,67 @@ document.querySelector("#save-all").addEventListener("click", async () => {
 
 refresh();
 setInterval(refresh, 4000);
+
+async function setupSourceKit() {
+  const panel = document.querySelector("#sourcekit-panel");
+  if (!panel) return;
+  try {
+    const info = await request("/api/sourcekit/sources");
+    if (!info.enabled) return;
+    panel.hidden = false;
+    const sources = document.querySelector("#search-sources");
+    const results = document.querySelector("#search-results");
+    const status = document.querySelector("#search-status");
+    const searchButton = document.querySelector("#search-submit");
+    for (const [id, name] of Object.entries(info.sites)) {
+      const label = el("label", "source-option");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.value = id;
+      input.checked = id !== "sk_czbooks";
+      label.append(input, document.createTextNode(" " + name));
+      sources.append(label);
+    }
+    document.querySelector("#sourcekit-search").addEventListener("submit", async event => {
+      event.preventDefault();
+      const keyword = document.querySelector("#search-keyword").value.trim();
+      const ids = [...sources.querySelectorAll("input:checked")].map(input => input.value);
+      if (!keyword || !ids.length) { status.textContent = "请选择书源并输入关键词。"; return; }
+      searchButton.disabled = true;
+      status.textContent = "搜索中…";
+      results.replaceChildren();
+      try {
+        const data = await request("/api/sourcekit/search", {method:"POST",body:JSON.stringify({keyword,sites:ids})});
+        status.textContent = Object.entries(data.statuses).map(([id, state]) => {
+          const name = info.sites[id] || id;
+          if (state.state === "blocked") return name + "：站点要求浏览器验证";
+          if (state.state === "failed") return name + "：搜索失败";
+          if (state.state !== "completed") return name + "：状态未知";
+          return name + "：" + (state.count || 0) + " 条";
+        }).join(" · ");
+        for (const row of data.results) {
+          const item = el("div", "job");
+          const detail = el("div", "job-main");
+          detail.append(el("div","job-title",row.title || row.book_url),el("div","job-sub",(row.author || "未知作者")+" · "+(info.sites[row.site] || row.site)));
+          const button = el("button","minor","加入列表");
+          button.type = "button";
+          button.addEventListener("click", () => {
+            const existing = links.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+            if (!existing.includes(row.book_url)) existing.push(row.book_url);
+            links.value = existing.join("\n");
+            button.textContent = "已加入";
+          });
+          item.append(detail,button);results.append(item);
+        }
+        if (data.statuses.sk_czbooks && ["blocked","failed"].includes(data.statuses.sk_czbooks.state)) {
+          const manual = el("a","download","在小说狂人原站搜索");
+          manual.href = "https://czbooks.net/s/"+encodeURIComponent(keyword);
+          manual.target = "_blank";manual.rel = "noopener noreferrer";
+          results.append(manual);
+        }
+      } catch(err) {status.textContent = "搜索失败："+err.message;}
+      finally {searchButton.disabled=false;}
+    });
+  } catch (_) { /* Keep the original 52 download page available. */ }
+}
+setupSourceKit();

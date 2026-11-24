@@ -40,3 +40,7 @@ footer { margin:25px 2px }
   .job-actions button,.job-actions .download { flex:1 }
   button,.download { touch-action:manipulation }
 }
+
+#sourcekit-panel input[type="text"], #search-keyword { width:100%; margin: 0.4rem 0 0.7rem; padding:0.7rem; border:1px solid #64748b; border-radius:0.5rem; font:inherit; }
+.source-option { display:inline-flex; align-items:center; gap:0.25rem; }
+#search-results { margin-top:0.7rem; }

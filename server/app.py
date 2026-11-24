@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from session_auth import BrowserAuth
 from pydantic import BaseModel, Field
+import sourcekit_bridge as sourcekit
 
 DATA = Path(os.environ.get("NOVELS_DATA_DIR", "/var/lib/novels-web"))
 BOOKS = DATA / "books"
@@ -90,13 +91,15 @@ def normalize_url(raw: str):
         raise ValueError("URL too long")
     try:
         u = urlsplit(raw.strip())
+        if u.hostname not in ("52shuku.net", "www.52shuku.net") and sourcekit.BIN:
+            return sourcekit.normalize_external(raw.strip())
         if (u.scheme != "https" or u.username is not None or u.password is not None
                 or u.hostname not in ("52shuku.net", "www.52shuku.net")
                 or u.port not in (None, 443) or u.query):
             raise ValueError("Only HTTPS 52shuku book URLs are accepted")
         if not re.fullmatch(r"/(?:[A-Za-z0-9_-]+/)+[A-Za-z0-9_-]+\.html", u.path):
             raise ValueError("Please paste a 52shuku book homepage URL")
-        if u.path.endswith(("_2.html", "_3.html")):
+        if re.search(r"_\d+\.html$", u.path):
             # Reading pages are not accepted; users must submit the book homepage.
             raise ValueError("Please paste the main book URL, not a chapter page")
         return urlunsplit(("https", "www.52shuku.net", u.path, "", ""))
@@ -138,10 +141,12 @@ async def worker():
         progress_error = ""
         path = ""
         try:
+            args = sourcekit.command(row["url"], BOOKS, DATA) if sourcekit.BIN else None
+            if args is None:
+                args = [YURI, "download", row["url"], "--source", "52shuku", "--format", "txt",
+                        "--concurrency", "4", "--rate-limit", "2.0", "--retry-count", "3", "--output-dir", str(BOOKS)]
             proc = await asyncio.create_subprocess_exec(
-                YURI, "download", row["url"], "--source", "52shuku", "--format", "txt",
-                "--concurrency", "4", "--rate-limit", "2.0", "--retry-count", "3",
-                "--output-dir", str(BOOKS),
+                *args,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 env={k: v for k, v in os.environ.items() if k.lower() not in (
                     "http_proxy", "https_proxy", "all_proxy")},
@@ -183,7 +188,7 @@ async def worker():
                 title = Path(path).stem.rsplit("-", 1)[0] if path else ""
                 db.execute("""UPDATE jobs SET state=?,file_path=?,title=?,error=?,finished_at=?
                            WHERE id=?""", (final_state, path, title, "" if final_state == "completed"
-                           else (progress_error or f"YuriScraper exited with {code}")[-900:],
+                           else (progress_error or f"Downloader exited with {code}")[-900:],
                            time.time(), row["id"]))
         except asyncio.CancelledError:
             if running_process is not None and running_process.returncode is None:
@@ -285,6 +290,27 @@ async def javascript(_: bool = Depends(authorize)):
 @app.get("/assets/style.css")
 async def stylesheet(_: bool = Depends(authorize)):
     return FileResponse(STATIC / "style.css", media_type="text/css; charset=utf-8")
+
+
+
+class SearchSubmission(BaseModel):
+    keyword: str = Field(min_length=1,max_length=100)
+    sites: list[str] = Field(min_length=1,max_length=3)
+
+
+@app.get("/api/sourcekit/sources")
+async def sourcekit_sources(_: bool = Depends(authorize)):
+    return {"enabled": bool(sourcekit.BIN), "sites":sourcekit.SITES if sourcekit.BIN else {}, "use_52":sourcekit.USE_52}
+
+
+@app.post("/api/sourcekit/search")
+async def sourcekit_search(data: SearchSubmission, _: bool = Depends(authorize)):
+    try:
+        return await sourcekit.search(data.keyword,data.sites)
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504,"书源搜索超时") from exc
+    except OSError as exc:
+        raise HTTPException(503,"SourceKit 不可用") from exc
 
 
 @app.post("/api/batches")

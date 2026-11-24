@@ -49,6 +49,16 @@ printf '【小说简介】\\n保留小剧场。\\n\\n第1章\\n正文。\\n' > "
 echo "$out/测试小说-0123456789abcdef.txt"
 """)
         cls.scraper.chmod(0o700)
+        cls.sourcekit = cls.root / "fake-sourcekit"
+        cls.sourcekit.write_text(
+            "#!/bin/sh\n"
+            "if [ \"$1\" = search ]; then\n"
+            "printf '%s\\n' '{\"results\":[{\"site\":\"sk_czbooks\",\"title\":\"測試\",\"author\":\"作者\",\"book_url\":\"https://czbooks.net/n/test1\"}],\"statuses\":{\"sk_czbooks\":{\"state\":\"completed\",\"count\":1}}}'\n"
+            "else\n"
+            "exec " + str(cls.scraper) + " \"$@\"\n"
+            "fi\n"
+        )
+        cls.sourcekit.chmod(0o700)
         cls.port = free_port()
         cls.base = f"http://127.0.0.1:{cls.port}"
         env = os.environ.copy()
@@ -56,6 +66,8 @@ echo "$out/测试小说-0123456789abcdef.txt"
             NOVELS_DATA_DIR=str(cls.root / "data"),
             NOVELS_PASSWORD_FILE=str(cls.passwd),
             NOVELS_YURI_BIN=str(cls.scraper),
+            NOVELS_SOURCEKIT_BIN=str(cls.sourcekit),
+            NOVELS_SOURCEKIT_52="0",
             NOVELS_ORIGIN=cls.base,
         )
         cls.proc = subprocess.Popen(
@@ -159,6 +171,20 @@ echo "$out/测试小说-0123456789abcdef.txt"
         self.assertIn("下载 TXT", html.decode())
         self.assertEqual(self.req("/assets/app.js")[0], 200)
         self.assertEqual(self.req("/assets/style.css")[0], 200)
+
+    def test_sourcekit_search_and_auth(self):
+        self.assertEqual(self.req("/api/sourcekit/sources", authenticated=False)[0],401)
+        status,_,body=self.req("/api/sourcekit/sources")
+        self.assertEqual(status,200)
+        self.assertTrue(json.loads(body)["enabled"])
+        query={"keyword":"測試","sites":["sk_czbooks"]}
+        self.assertEqual(self.req("/api/sourcekit/search",method="POST",data=query,origin="https://attacker.invalid")[0],403)
+        status,_,body=self.req("/api/sourcekit/search",method="POST",data=query,origin=self.base)
+        self.assertEqual(status,200,body)
+        result=json.loads(body)
+        self.assertEqual(result["results"][0]["book_url"],"https://czbooks.net/n/test1")
+        self.assertEqual(result["statuses"]["sk_czbooks"]["count"],1)
+        self.assertEqual(self.req("/api/sourcekit/search",method="POST",data={"keyword":"x","sites":["invalid"]},origin=self.base)[0],422)
 
     def test_url_validation_and_origin(self):
         self.assertEqual(
