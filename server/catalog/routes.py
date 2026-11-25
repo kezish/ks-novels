@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
-from .store import init,connect,books_for,now
+from .store import init,connect,books_for,now,active_edition
 from sources.registry import registry
 from .progress import status as sync_status
 
@@ -51,7 +51,7 @@ def install(app, *, path, static, authorize, job_connect, book_dir, normalize_ur
             e=db.execute('SELECT * FROM editions WHERE day=?',(day.isoformat(),)).fetchone()
             preview=e is None and day==now().date()
             books=books_for(db,day.isoformat(),preview=preview) if e or preview else []
-            return {'day':day.isoformat(),'published':bool(e),'preview':preview,'partial':bool(e['partial']) if e else False,'books':books}
+            return {'day':day.isoformat(),'published':bool(e),'preview':preview,'active':day.isoformat()==active_edition(db),'partial':bool(e['partial']) if e else False,'books':books}
     @router.get('/api/books/{book_id}/direct')
     def direct(book_id: int, source: str='jiujiu', external_id: str | None=None):
         row=selected(book_id,source,external_id)

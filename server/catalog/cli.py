@@ -2,7 +2,7 @@ import argparse
 import fcntl
 import os
 from pathlib import Path
-from .store import init,publish
+from .store import init,publish,append_active
 from .sync import sync
 
 def main():
@@ -22,6 +22,12 @@ def run(action,db):
         results=sync(db)
         for r in results: print(*r,flush=True)
     else: results=[]
-    if action in ('publish','daily'): print('Published:',publish(db),flush=True)
+    if action in ('publish','daily'):
+        published=publish(db)
+        print('Published:',published,flush=True)
+    else:
+        published=False
+    if action=='sync' or (action=='daily' and not published):
+        print('Appended:',append_active(db),flush=True)
     return int(any(not r[2] for r in results))
 if __name__=='__main__': raise SystemExit(main())

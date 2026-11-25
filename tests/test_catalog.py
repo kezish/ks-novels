@@ -58,6 +58,44 @@ class CatalogTests(unittest.TestCase):
         tomorrow=(now().date()+timedelta(days=1)).isoformat()
         publish(self.path,tomorrow)
         with connect(self.path) as db: self.assertEqual(books_for(db,tomorrow),[])
+    def test_append_active_editions(self):
+        from catalog.store import append_active
+        from catalog.cli import run
+        from unittest.mock import patch
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        tz=ZoneInfo('Asia/Singapore')
+        day1=datetime(2026,11,25,8,0,tzinfo=tz)
+        day2=datetime(2026,11,26,8,0,tzinfo=tz)
+        def add(n,stamp):
+            e=Entry(str(n),'https://example/'+str(n),str(n),'作者','仙侠',stamp.date().isoformat(),'latest_upload')
+            with connect(self.path) as db:
+                return upsert(db,'jiujiu',e,Metadata(e.title,e.author,e.category,'简介',e.uploaded),stamp.isoformat())
+        add(1,day1)
+        with patch('catalog.store.now',return_value=day1):
+            self.assertEqual(append_active(self.path),0)
+            self.assertTrue(publish(self.path))
+        add(2,day1+timedelta(hours=1))
+        with patch('catalog.store.now',return_value=day1+timedelta(hours=2)), patch('catalog.cli.sync',return_value=[]):
+            self.assertEqual(run('sync',self.path),0)
+            self.assertEqual(append_active(self.path),0)
+        # Until 08:00, the preceding edition remains active.
+        add(3,day2-timedelta(hours=1))
+        with patch('catalog.store.now',return_value=day2-timedelta(minutes=30)):
+            self.assertEqual(append_active(self.path),1)
+        # A daily run creates the new edition instead of appending to yesterday.
+        add(4,day2)
+        with patch('catalog.store.now',return_value=day2), patch('catalog.cli.sync',return_value=[]):
+            self.assertEqual(run('daily',self.path),0)
+        add(5,day2+timedelta(hours=1))
+        with patch('catalog.store.now',return_value=day2+timedelta(hours=2)):
+            self.assertEqual(append_active(self.path),1)
+            self.assertEqual(append_active(self.path),0)
+        with connect(self.path) as db:
+            self.assertEqual({b['title'] for b in books_for(db,'2026-11-25')},{'1','2','3'})
+            self.assertEqual({b['title'] for b in books_for(db,'2026-11-26')},{'4','5'})
+            self.assertEqual(db.execute('SELECT count(*) FROM notification_outbox').fetchone()[0],2)
+
     def test_live_progress_and_interruption(self):
         import fcntl
         from catalog.progress import Progress,status

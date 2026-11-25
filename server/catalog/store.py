@@ -83,6 +83,22 @@ def publish(path, day=None):
         db.execute('INSERT INTO notification_outbox(day) VALUES(?)',(day,))
     return True
 
+def active_edition(db):
+    row=db.execute('SELECT max(day) FROM editions WHERE day<=?',(now().date().isoformat(),)).fetchone()
+    return row[0]
+
+def append_active(path):
+    """Append unassigned books to the current edition, never reopen older editions."""
+    with connect(path) as db:
+        db.execute('BEGIN IMMEDIATE')
+        day=active_edition(db)
+        if day is None:
+            return 0
+        return db.execute("""INSERT INTO edition_items
+          SELECT ?,id FROM books WHERE first_seen<=?
+          AND NOT EXISTS (SELECT 1 FROM edition_items i WHERE i.book_id=books.id)""",
+          (day,now().isoformat())).rowcount
+
 def books_for(db,day,*,preview=False):
     if preview:
         rows=db.execute("""SELECT b.* FROM books b WHERE NOT EXISTS
