@@ -15,3 +15,6 @@
 .date-row{justify-content:space-between}.daily-options summary{position:relative;list-style:none}
 .filters select{min-height:40px;padding:5px;border-radius:6px}
 .filters label{margin-bottom:0}.book .desc-actions .source-pick{font:inherit;font-size:12px;padding:4px}
+
+.sync-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;margin:8px 0;padding:7px 9px;background:#ffffff70;border-radius:6px}
+.sync-summary div{display:flex;flex-direction:column;gap:1px;min-width:0}.sync-summary span{font-size:11px;opacity:.85}.sync-summary strong{font-size:12px;font-weight:650;line-height:1.5;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.upload-date{font-variant-numeric:tabular-nums}

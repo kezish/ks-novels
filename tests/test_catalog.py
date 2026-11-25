@@ -82,6 +82,47 @@ class CatalogTests(unittest.TestCase):
         p.end()
         self.assertEqual(status(self.path)['state'],'done')
 
+    def test_publication_order_and_last_sync(self):
+        from catalog.progress import Progress,status
+        from unittest.mock import patch
+        class Adapter:
+            modes=("latest_upload",)
+            display_name="测试"
+        p=Progress(self.path,{"jiujiu":Adapter()})
+        with connect(self.path) as db:
+            for source,id,title,uploaded in [
+                ("jiujiu","1","新书","2026-11-25 10:30:00"),
+                ("jiujiu","2","旧书","2026-11-24"),
+                ("52shuku","3","旧书","2026-11-25 09:30:00"),
+                ("jiujiu","4","最新","2026-11-25 12:00:00")]:
+                e=Entry(id,"https://example/"+id,title,"作者","言情",uploaded,"latest_upload")
+                upsert(db,source,e,Metadata(e.title,e.author,e.category,"简介",uploaded),now().isoformat())
+            items=books_for(db,now().date().isoformat(),preview=True)
+            self.assertEqual([b["title"] for b in items],["最新","新书","旧书"])
+            self.assertEqual(items[-1]["uploaded"],"2026-11-25 09:30:00")
+        p.finish(p.start(0,"2026-11-17"),True,"")
+        p.end()
+        with patch("catalog.progress.next_sync",return_value="2026-11-25T10:15:00+00:00"):
+            result=status(self.path)
+            self.assertEqual(result["last_sync"]["new_books"],3)
+            self.assertEqual(result["last_sync"]["new_sources"],4)
+            self.assertEqual(result["next_sync"],"2026-11-25T10:15:00+00:00")
+            saved=result["last_sync"]
+            Progress(self.path,{"jiujiu":Adapter()})
+            self.assertEqual(status(self.path)["last_sync"],saved)
+        publish(self.path)
+        with connect(self.path) as db:
+            self.assertEqual([b["title"] for b in books_for(db,now().date().isoformat())],["最新","新书","旧书"])
+
+    def test_next_sync_actual_timer(self):
+        from catalog.progress import next_sync
+        from unittest.mock import patch
+        from subprocess import CompletedProcess
+        with patch.dict("os.environ",{"NOVELS_CATALOG_EXTERNAL_TIMER":"1"}),patch("catalog.progress.subprocess.run",side_effect=[
+            CompletedProcess([],0,"ActiveState=active\\nNextElapseUSecRealtime=Wed 2026-11-25 10:15:00 UTC\\n".replace("\\n","\n"),""),
+            CompletedProcess([],0,"ActiveState=active\\nNextElapseUSecRealtime=Thu 2026-11-26 00:00:00 UTC\\n".replace("\\n","\n"),"")]):
+            self.assertEqual(next_sync(),"2026-11-25T10:15:00+00:00")
+
     def test_sync_failure_no_watermark(self):
         stamp=now().date().isoformat()
         class Adapter:

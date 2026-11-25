@@ -18,8 +18,8 @@ window.fetch=async (u,o={})=>{
   else if(u==="/api/sourcekit/search")data={results:[{...row,title:"较旧",book_url:"https://www.52shuku.net/gl/old.html",published:"2025-01-01"},row],statuses:{sk_shuku52:{state:"completed"}}};
   else if(u.startsWith("/api/sourcekit/detail"))data={description:"长简介\n\n".repeat(25)};
   else if(u==="/api/daily")data={editions:[{day:"2026-11-24"}]};
-  else if(u.startsWith("/api/daily/"))data={preview:true,books:[{id:1,title:row.title,author:row.author,category:"百合",description:"测试简介",sources:[{source:"52shuku",label:"52书库",external_id:"/gl/a.html",url,download_kind:"queued",modes:["latest_upload"]}]}]};
-  else if(u==="/api/catalog/sync-status")data={state:"done",books:1,stages:[],sources:[]};
+  else if(u.startsWith("/api/daily/"))data={preview:true,books:[{id:1,title:row.title,author:row.author,category:"百合",description:"测试简介",sources:[{source:"52shuku",label:"52书库",external_id:"/gl/a.html",url,uploaded:"2026-11-25 15:00:00",download_kind:"queued",modes:["latest_upload"]}]}]};
+  else if(u==="/api/catalog/sync-status")data={state:"done",books:1,stages:[],sources:[],last_sync:{completed:"2026-11-25T09:18:00Z",state:"done",new_books:3,new_sources:4},next_sync:"2026-11-25T10:15:00Z"};
   else throw Error("unhandled "+u);
   return new Response(JSON.stringify(data),{status:200});
 };
@@ -73,6 +73,11 @@ window.addEventListener("load",async()=>{
     await delay(250);
     const book=document.querySelector(".book"),action=book.querySelector(".book-action"),fold=book.querySelector("details");
     check(book.querySelector(".genre").textContent==="百合","category");
+    check(document.querySelector("#sync-last").textContent==="2026-11-25 17:18","last sync");
+    check(document.querySelector("#sync-next").textContent==="2026-11-25 18:15","next sync");
+    check(document.querySelector("#sync-new").textContent==="3 本","new count");
+    check(document.querySelector("#sync-total").textContent==="1 本","total count");
+    check(book.querySelector(".upload-date").textContent==="2026-11-25 15:00","uploaded");
     fold.open=true;await delay(50);
     check(action.parentElement.className==="desc-actions","action moves");
     check(book.querySelector(".text-link").href===url,"original link");

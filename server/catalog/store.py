@@ -104,5 +104,6 @@ def books_for(db,day,*,preview=False):
             item['download_kind']=adapter.download_kind if adapter else 'unavailable'
             item['modes']=[m[0] for m in db.execute('SELECT mode FROM memberships WHERE source=? AND external_id=?',(s['source'],s['external_id']))]
             b['sources'].append(item)
+        b["uploaded"]=max((s["uploaded"] for s in b["sources"] if s["uploaded"]),default="")
         result.append(b)
-    return result
+    return sorted(result,key=lambda b:(b["uploaded"],b["id"]),reverse=True)

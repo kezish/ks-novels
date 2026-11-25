@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f2f4f3"><title>每日新书</title>
-<link rel="stylesheet" href="/assets/daily.css?v=6">
-<script src="/assets/daily.js?v=6" defer></script>
+<link rel="stylesheet" href="/assets/daily.css?v=8">
+<script src="/assets/daily.js?v=8" defer></script>
 </head>
 <body>
 <main>
@@ -13,6 +13,12 @@
 <section id="sync-panel" class="sync-panel" aria-label="小说同步进度">
 <div class="sync-head"><strong>小说同步</strong><span id="sync-state" role="status">读取状态…</span></div>
 <progress id="sync-progress" max="1" aria-label="同步阶段完成进度"></progress>
+<div class="sync-summary" aria-label="同步摘要">
+<div><span>上次同步</span><strong id="sync-last">—</strong></div>
+<div><span>上轮新增</span><strong id="sync-new">—</strong></div>
+<div><span>下次同步</span><strong id="sync-next">—</strong></div>
+<div><span>累计入库</span><strong id="sync-total">—</strong></div>
+</div>
 <p id="sync-info" class="sync-info"></p>
 <p id="sync-detail" class="sync-info"></p>
 <div id="sync-page-wrap" hidden><label id="sync-page-label" class="sync-info" for="sync-page-progress">当前页</label><progress id="sync-page-progress" max="1"></progress></div>

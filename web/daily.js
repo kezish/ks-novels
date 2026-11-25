@@ -4,7 +4,17 @@ let books=[], generation=0, preview=false, previewStamp=null;
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n;}
 async function req(url,options){const r=await fetch(url,options);if(r.status===401){location.assign("/login?next="+encodeURIComponent(location.pathname));throw Error("登录已过期");}if(!r.ok)throw Error("请求失败 "+r.status);return r.json();}
 function shift(day,n){const d=new Date(day+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10);}
-function filter(){return books.filter(b=>(!$("category").value||b.category===$("category").value)&&b.sources.some(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value))));}
+function matchingSources(b){return b.sources.filter(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value)));}
+function uploadDate(b){return matchingSources(b).map(s=>s.uploaded||"").sort().at(-1)||"";}
+function filter(){return books.filter(b=>(!$("category").value||b.category===$("category").value)&&matchingSources(b).length).sort((a,b)=>uploadDate(b).localeCompare(uploadDate(a))||b.id-a.id);}
+function syncTime(value){
+  if(!value)return "暂无记录";
+  const d=new Date(value);
+  if(Number.isNaN(d.getTime()))return "暂无记录";
+  const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Singapore",year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).formatToParts(d);
+  const p=Object.fromEntries(parts.map(x=>[x.type,x.value]));
+  return p.year+"-"+p.month+"-"+p.day+" "+p.hour+":"+p.minute;
+}
 function directURL(b,s){return "/api/books/"+b.id+"/direct?"+new URLSearchParams({source:s.source,external_id:s.external_id});}
 async function queued(b,s,button,key){
   if(button.dataset.file){const a=el("a");a.href=button.dataset.file;a.download=button.dataset.filename||"novel.txt";document.body.append(a);a.click();a.remove();return;}
@@ -39,11 +49,12 @@ function render(){
     const summary=el("summary"),main=el("div",undefined,"book-main"),meta=el("div",undefined,"book-meta");
     const genre=el("span",b.category||"未分类","genre");genre.dataset.genre=b.category||"";
     meta.append(genre,el("span",b.author||"未知作者"),el("span","· "+b.sources.map(s=>s.label||s.source).join(" / "),"source-note"));
+    const uploaded=uploadDate(b);if(uploaded)meta.append(el("span",uploaded.slice(0,16),"source-note upload-date"));
     main.append(el("span",b.title,"book-title"),meta);summary.append(main,el("span","⌄","chevron"));d.append(summary);
     const desc=el("div",undefined,"desc"),copy=el("div",b.description||"暂无简介","desc-copy"),actions=el("div",undefined,"desc-actions");
     desc.append(copy,actions);d.append(desc);card.append(d);
     const select=el("select",undefined,"source-pick");select.setAttribute("aria-label","下载书源");
-    const sources=[...b.sources].filter(s=>(!$("source").value||s.source===$("source").value)&&(!$("mode").value||s.modes.includes($("mode").value))).sort((a,b)=>Number(b.download_kind==="direct")-Number(a.download_kind==="direct"));
+    const sources=matchingSources(b).sort((a,b)=>Number(b.download_kind==="direct")-Number(a.download_kind==="direct"));
     sources.forEach((s,i)=>{const o=el("option",s.label||s.source);o.value=i;select.append(o);});
     const original=el("a","原站详情 ↗","text-link");original.target="_blank";original.rel="noopener noreferrer";actions.append(original);
     if(sources.length>1)actions.append(select);
@@ -107,7 +118,12 @@ function showSync(data){
   if(state==="running"&&(!active||!stages.length))progress.removeAttribute("value");
   else if(stages.length)progress.value=ended;
   else progress.value=state==="done"?1:0;
-  $("sync-info").textContent="已入库 "+data.books+" 本"+(stages.length?" · 已结束 "+ended+"/"+stages.length+" 阶段 · 成功 "+done:"");
+  const last=data.last_sync;
+  $("sync-last").textContent=last?syncTime(last.completed)+(last.state==="failed"?"（部分失败）":""):"暂无记录";
+  $("sync-new").textContent=last?last.new_books+" 本":"暂无记录";
+  $("sync-next").textContent=data.next_sync?syncTime(data.next_sync):"暂不可用";
+  $("sync-total").textContent=Number.isInteger(data.books)?data.books+" 本":"—";
+  $("sync-info").textContent=stages.length?"已结束 "+ended+"/"+stages.length+" 阶段 · 成功 "+done:"";
   const src=(data.sources||[]).map(s=>s.label+" "+s.count+" 条").join(" · ");
   $("sync-page-wrap").hidden=!active;
   if(active){
@@ -134,6 +150,7 @@ function showSync(data){
     container.append(row);
   }
   if(!stages.length&&src)container.append(el("p",src,"sync-info"));
+  if(last)container.append(el("p","上轮新增书源 "+last.new_sources+" 条（含同书不同来源）","sync-info"));
   if(data.updated){
     const time=new Date(data.updated);
     if(!Number.isNaN(time.getTime()))container.append(el("p","最后更新："+time.toLocaleString("zh-CN",{timeZone:"Asia/Singapore",hour12:false}),"sync-info"));
