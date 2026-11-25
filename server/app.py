@@ -167,7 +167,8 @@ async def worker():
                 out = (await proc.stdout.read()).decode("utf-8", "replace").strip()
                 return out
 
-            output = await asyncio.wait_for(collect(), timeout=WORKER_TIMEOUT)
+            timeout = 6 * WORKER_TIMEOUT if urlsplit(row["url"]).hostname == "www.256wx.org" else WORKER_TIMEOUT
+            output = await asyncio.wait_for(collect(), timeout=timeout)
             code = await proc.wait()
             if code == 0:
                 candidates = [Path(v.strip()) for v in output.splitlines() if v.strip().endswith(".txt")]

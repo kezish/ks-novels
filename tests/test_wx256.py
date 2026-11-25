@@ -21,7 +21,7 @@ class WXTests(unittest.TestCase):
         self.assertEqual(rows[0]["author"],"合成作者")
         self.assertEqual(rows[0]["book_url"],w.BASE+"/read/1/")
         self.assertEqual(rows[0]["published"],"2026-10-28")
-        self.assertTrue(rows[0]["download_unavailable"])
+        self.assertNotIn("download_unavailable",rows[0])
         with self.assertRaises(ValueError):w.parse_results('<h2>首页推荐</h2>',URL,"重生")
         with self.assertRaises(ValueError):w.parse_results(page(),URL,"其他")
         with self.assertRaises(ValueError):w.parse_results(page().replace('searchid=123','searchid=456'),URL,"其他")

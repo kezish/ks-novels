@@ -51,7 +51,7 @@ def parse_results(body,url,keyword):
         seen.add(target)
         try:published=date_time(first(card,"time").text())[:10]
         except ValueError:published=""
-        rows.append(dict(site=SITE,title=title.strip(),author=author.strip(),book_url=target,published=published,category="",download_unavailable=True))
+        rows.append(dict(site=SITE,title=title.strip(),author=author.strip(),book_url=target,published=published,category=""))
     next_url=None
     for a in first(main,cls="page").find("a"):
         if a.text().strip()!="下一页":continue

@@ -1,5 +1,6 @@
 """Optional local SourceKit subprocess integration; never exposes the engine API."""
 import asyncio
+import sys
 import json
 import os
 import re
@@ -32,6 +33,9 @@ def classify(url):
         return "sk_shuku52"
     if host=="www.biquge5.com" and re.fullmatch(r"/[\d_]+/?",u.path):
         return "sk_biquge5"
+    if host=="www.256wx.org":
+        wx256.book_url(url)
+        return wx256.SITE
     if host=="czbooks.net" and re.fullmatch(r"/n/[A-Za-z0-9_-]{1,100}/?",u.path):
         return "sk_czbooks"
     raise ValueError("不支持的书源或链接")
@@ -40,11 +44,14 @@ def normalize_external(url):
     if not BIN:raise ValueError("SourceKit 尚未启用")
     site=classify(url)
     if site=="sk_shuku52":raise ValueError("52书库由原有URL校验处理")
+    if site==wx256.SITE:return wx256.book_url(url)
     u=urlsplit(url)
     return urlunsplit(("https",u.hostname,u.path,"",""))
 
 def command(url,books,data):
     site=classify(url)
+    if site==wx256.SITE:
+        return [sys.executable,str(Path(__file__).resolve().parent/"sources"/"wx256_download_cli.py"),url,"--output-dir",str(books)]
     if not BIN or (site=="sk_shuku52" and not USE_52):
         return None
     return [BIN,"download",url,"--output-dir",str(books),"--cache-dir",str(data/"sourcekit-cache")]
