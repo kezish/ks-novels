@@ -7,6 +7,7 @@ from collections import OrderedDict
 from urllib.parse import urlsplit
 from fastapi import HTTPException
 import sourcekit_bridge as bridge
+from sources import wx256
 
 CACHE=OrderedDict()
 LOCKS={s:asyncio.Lock() for s in bridge.ALL_SITES}
@@ -18,6 +19,9 @@ def identity(site,url):
         u=urlsplit(url)
         if u.scheme!="https" or u.username or u.password or u.port not in (None,443) or u.query:
             raise ValueError()
+        if site==wx256.SITE:
+            canonical=wx256.book_url(url)
+            return wx256.SITE,canonical.split("/")[-2],canonical
         if site=="sk_jiujiu" and u.hostname=="www.ijjxsxzw.com":
             if m:=re.fullmatch(r"/txt/([0-9]{1,12})\.html",u.path):
                 return "jiujiu",m[1],"https://www.ijjxsxzw.com"+u.path
@@ -91,7 +95,9 @@ async def detail(site,url,path):
             await asyncio.sleep(max(0,2.5-(time.monotonic()-LAST.get(site,0))))
             LAST[site]=time.monotonic()
             try:
-                data=await asyncio.to_thread(read52,canonical) if site=="sk_shuku52" else await read_engine(canonical)
+                if site==wx256.SITE:data=await asyncio.to_thread(wx256.read_intro,canonical)
+                elif site=="sk_shuku52":data=await asyncio.to_thread(read52,canonical)
+                else:data=await read_engine(canonical)
             except HTTPException:raise
             except Exception as e:
                 if getattr(e,"code",None)==429:raise HTTPException(429,"原站限流，请稍后重试") from e

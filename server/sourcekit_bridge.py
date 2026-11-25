@@ -7,13 +7,14 @@ from datetime import date
 from pathlib import Path
 from urllib.parse import urlsplit,urlunsplit
 from fastapi import HTTPException
+from sources import wx256
 
 BIN=os.environ.get("NOVELS_SOURCEKIT_BIN","")
 USE_52=os.environ.get("NOVELS_SOURCEKIT_52","0")=="1"
 SITES={"sk_shuku52":"52书库","sk_biquge5":"笔趣阁5","sk_czbooks":"小说狂人"}
 SEARCH_LIMIT=asyncio.Semaphore(2)
 CATALOG_SITE="sk_jiujiu"
-ALL_SITES={**SITES,CATALOG_SITE:"久久小说（本地书单）"}
+ALL_SITES={**SITES,CATALOG_SITE:"久久小说（本地书单）",wx256.SITE:"256文学"}
 CATEGORIES={"romance":"言情","bl":"耽美","gl":"百合","fanfic":"综漫","male":"男频","ncp":"无CP"}
 # Local catalog categories are not interchangeable with relationship tags.
 LOCAL_CATEGORIES={"ncp":("无CP向",),"romance":("现代言情","总裁豪门"),"fanfic":("同人小说",)}
@@ -132,18 +133,18 @@ async def search(keyword,sites,catalog_path=None,cursors=None,category="",order=
     if any(s not in sites or type(n) is not int or not 1<=n<=10000 for s,n in cursors.items()):
         raise HTTPException(422,"无效搜索页码")
     if not BIN:raise HTTPException(503,"SourceKit 尚未启用")
-    if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>4 or any(s not in ALL_SITES for s in sites):
+    if not keyword.strip() or len(keyword)>100 or not sites or len(sites)>len(ALL_SITES) or any(s not in ALL_SITES for s in sites):
         raise HTTPException(422,"无效搜索参数")
     if (category and category not in CATEGORIES) or order not in ("relevance","newest","oldest"):
         raise HTTPException(422,"无效筛选或排序")
     eligible=[s for s in sites if not category or (s=="sk_shuku52" and category!="ncp") or (s==CATALOG_SITE and category in LOCAL_CATEGORIES)]
     skipped={s:{"state":"unsupported","count":0,"message":"该书源暂不支持此类型筛选"} for s in sites if s not in eligible}
-    live=[s for s in eligible if s!=CATALOG_SITE]
+    live=[s for s in eligible if s in SITES]
     result={"results":[],"statuses":{}}
     if live:
         try:result=await search_live(keyword,live,{s:n for s,n in cursors.items() if s in live},category,order)
         except (HTTPException,OSError,asyncio.TimeoutError):
-            if CATALOG_SITE not in sites:raise
+            if CATALOG_SITE not in sites and wx256.SITE not in sites:raise
             result["statuses"]={s:{"state":"failed"} for s in live}
     if CATALOG_SITE in eligible:
         if catalog_path is None:raise HTTPException(503,"本地书单不可用")
@@ -153,6 +154,10 @@ async def search(keyword,sites,catalog_path=None,cursors=None,category="",order=
         rows=rows[:100]
         result["results"].extend(rows)
         result["statuses"][CATALOG_SITE]={"state":"catalog","count":len(rows),"pages":1,"next_page":page+1 if more else None,"message":"原站搜索暂不可用；仅查询已同步书单"}
+    if wx256.SITE in eligible:
+        rows,status=await asyncio.to_thread(wx256.SEARCHER.search,keyword,cursors.get(wx256.SITE,1))
+        result["results"].extend(rows)
+        result["statuses"][wx256.SITE]=status
     result["statuses"].update(skipped)
     if order!="relevance":
         dated=[r for r in result["results"] if r.get("published")]

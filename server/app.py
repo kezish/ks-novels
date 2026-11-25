@@ -295,7 +295,7 @@ async def stylesheet(_: bool = Depends(authorize)):
 
 class SearchSubmission(BaseModel):
     keyword: str = Field(min_length=1,max_length=100)
-    sites: list[str] = Field(min_length=1,max_length=4)
+    sites: list[str] = Field(min_length=1,max_length=len(sourcekit.ALL_SITES))
     cursors: dict[str,int] = Field(default_factory=dict)
     category: str = Field(default="",max_length=16)
     order: str = Field(default="relevance",max_length=16)

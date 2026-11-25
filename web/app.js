@@ -432,7 +432,7 @@ async function setupSourceKit() {
     let activeKeyword="",activeCategory="",activeOrder="newest",seen=new Set(),totals={},cursors={},states={};
     function explainFilters(){
       const c=categoryInput.value;
-      filterNote.textContent=c==="ncp"?"仅久久本地书单支持无CP分类。":["romance","fanfic"].includes(c)?"52原站及久久明确分类；其他书源暂不参与筛选。":c?"仅52书库支持此分类；其他书源暂不参与筛选。":"52、久久按站内发布 / 上传时间排序；无日期结果置后。";
+      filterNote.textContent=c==="ncp"?"仅久久本地书单支持无CP分类。":["romance","fanfic"].includes(c)?"52原站及久久明确分类；其他书源暂不参与筛选。":c?"仅52书库支持此分类；256等其他书源暂不参与筛选。":"52、久久、256按已获取的发布 / 上传时间排序；无日期结果置后。";
       if(orderInput.value==="relevance"&&!c)filterNote.textContent="";
     }
     categoryInput.addEventListener("change",explainFilters);
@@ -484,7 +484,10 @@ async function setupSourceKit() {
             }finally{loading=false;}
           }
           let button;
-          if(row.direct_url&&row.site==="sk_jiujiu") {
+          if(row.download_unavailable){
+            button=el("button","book-action","TXT 暂不可用");button.type="button";button.disabled=true;
+            button.title="原站TXT下载入口尚未验证有效文件";
+          } else if(row.direct_url&&row.site==="sk_jiujiu") {
             button=el("a","book-action","下载 TXT");button.href=row.direct_url;
           } else {
             button=el("button","book-action","下载 TXT");button.type="button";
@@ -508,11 +511,12 @@ async function setupSourceKit() {
           if(state.state==="catalog")tail+=" · 仅已同步书单";
           else if(state.state==="unsupported")tail+=" · 不支持此分类";
           else if(state.state==="blocked")tail+=" · 原站要求浏览器验证";
-          else if(state.state==="failed")tail+=" · 部分请求失败";
+          else if(state.state==="throttled")tail+=" · "+(state.message||"原站限流，请稍后重试");
+          else if(state.state==="failed")tail+=" · "+(state.message||"部分请求失败");
           else if(state.state!=="completed")tail+=" · 状态未知";
           return name+"：已获取 "+count+" 条"+tail;
         }).join("\n");
-        countNode.textContent=seen.size;activity.textContent=Object.values(states).some(s=>["blocked","failed"].includes(s.state))?"部分书源异常":"";
+        countNode.textContent=seen.size;activity.textContent=Object.values(states).some(s=>["blocked","failed","throttled"].includes(s.state))?"部分书源异常":"";
         updateSingleButtons();
         if(data.statuses.sk_czbooks&&["blocked","failed"].includes(data.statuses.sk_czbooks.state)&&!results.querySelector("[data-cz-manual]")){
           const manual=el("a","manual-search","在小说狂人原站搜索");
