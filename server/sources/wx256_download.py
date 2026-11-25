@@ -56,7 +56,14 @@ def content_text(node):
 def read_page(body,book,title,n,total):
     root=parse(body)
     heading=clean(node_id(root,"h1","nr_title").text())
-    if heading!=f"{title}({n})" and heading!=f"{title}（{n}）":
+    markers=(f"({n})",f"（{n}）")
+    expected={title+marker for marker in markers}
+    # The reader inserts its page number before the literal bonus-story suffix.
+    # Preserve exact base title, suffix and number; do not accept unrelated titles.
+    suffix=re.search(r"([+＋]\s*番外)$",title)
+    if suffix:
+        expected.update(title[:suffix.start()]+marker+suffix.group() for marker in markers)
+    if heading not in expected:
         raise ValueError(f"256第{n}页标题与目录不一致")
     node=node_id(root,"div","nr1")
     if not node.has("book_con"):raise ValueError(f"256第{n}页正文容器缺失")

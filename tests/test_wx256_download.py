@@ -34,6 +34,21 @@ class WXDownloadTests(unittest.TestCase):
             self.assertEqual(f.read_text(),"完整文案\n\n内容标签：合成\n\n第1章\n\n正文一\n下一行\n\n正文二\n")
             self.assertEqual(progress,[(0,2,0),(1,2,0),(2,2,0)])
             self.assertEqual(r.requests,[BOOK,BOOK+"1.html",BOOK+"2.html"])
+    def test_bonus_suffix_title(self):
+        for suffix in ("+番外","＋番外"):
+            title="合成小说"+suffix
+            for n in (1,2):
+                raw=reader_page(n).replace(f"合成小说({n})",f"合成小说({n})"+suffix)
+                self.assertTrue(d.read_page(raw,BOOK,title,n,2))
+                for invalid in (raw.replace(f"({n})",f"({n+1})"),raw.replace("合成小说","其他小说"),raw.replace(suffix,""),raw.replace(suffix,"+其他")):
+                    with self.assertRaises(ValueError):d.read_page(invalid,BOOK,title,n,2)
+                for good in (raw.replace(f"({n})",f"（{n}）"),raw.replace(f"({n})"+suffix,suffix+f"({n})")):
+                    self.assertTrue(d.read_page(good,BOOK,title,n,2))
+        r=FakeReader({BOOK:directory().replace("合成小说","合成小说+番外"),BOOK+"1.html":reader_page(1).replace("合成小说(1)","合成小说(1)+番外"),BOOK+"2.html":reader_page(2).replace("合成小说(2)","合成小说(2)+番外")})
+        with tempfile.TemporaryDirectory() as tmp:
+            f=d.export(BOOK,tmp,r)
+            self.assertTrue(f.name.startswith("合成小说+番外"))
+            self.assertIn("完整文案",f.read_text())
     def test_invalid_directory(self):
         for numbers in ((1,3),(1,1),(2,1),()):
             with self.assertRaises(ValueError):d.read_directory(directory(numbers),BOOK)
